@@ -49,7 +49,7 @@ def generate_prompt(input_dir, output_file):
     #   1) markdown with fences
     #   2) markdown without fences
     #   3) non-markdown
-    # But now, we will also do "start/end fence" wrapping for *any* file with triple backticks.
+    # But now, we wrap any file containing triple backticks in special markers.
     with_code_fences = []
     without_code_fences = []
     non_markdown = []
@@ -66,7 +66,6 @@ def generate_prompt(input_dir, output_file):
             else:
                 without_code_fences.append((rel_name, content))
         else:
-            # Non-markdown gets sorted last, but we do the fence check at write time
             non_markdown.append((rel_name, content))
 
     # Maintain the original order: markdown w/ fences -> markdown w/o -> non-markdown
@@ -84,18 +83,15 @@ def generate_prompt(input_dir, output_file):
 
         out.write("Below are the file contents:\n\n")
 
-        # IMPORTANT CHANGE: Now *any* file with triple backticks gets
-        # START/END fences, not just .md files. 
+        # Now *any* file with triple backticks gets START/END fences:
         for (rel_name, content) in file_sections:
             out.write(rel_name + "\n")
             if has_code_fences(content):
-                # Wrap with "START/END OF MARKDOWN FILE WITH CODE FENCES" text
-                # (Same label for all files to keep test expectations consistent)
-                out.write("START OF MARKDOWN FILE WITH CODE FENCES\n")
+                # Updated text to remove "MARKDOWN"
+                out.write("START OF FILE WITH CODE FENCES\n")
                 out.write(content)
-                out.write("\nEND OF MARKDOWN FILE WITH CODE FENCES\n\n")
+                out.write("\nEND OF FILE WITH CODE FENCES\n\n")
             else:
-                # Otherwise, wrap in backticks
                 out.write("```\n")
                 out.write(content)
                 out.write("\n```\n\n")
