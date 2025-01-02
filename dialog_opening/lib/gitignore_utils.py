@@ -1,69 +1,39 @@
 # lib/gitignore_utils.py (place in ./lib/gitignore_utils.py)
 
 import os
-import fnmatch
+from pathspec import PathSpec
+from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
-def load_gitignore_patterns(root_dir):
-    """Load .gitignore patterns as a single list, including negation lines with !."""
+def load_gitignore_spec(root_dir):
+    """
+    Load the .gitignore file at `root_dir` into a PathSpec object
+    that supports Git's wildmatch patterns (including negations, etc.).
+    """
     gitignore_path = os.path.join(root_dir, '.gitignore')
-    patterns = []
+    lines = []
     if os.path.isfile(gitignore_path):
         with open(gitignore_path, 'r', encoding='utf-8', errors='replace') as f:
-            for line in f:
-                line = line.strip()
-                # Ignore empty lines and comments
-                if not line or line.startswith('#'):
-                    continue
-                patterns.append(line)
-    return patterns
+            lines = f.read().splitlines()
 
-def matches_gitignore(path, root_dir, patterns):
+    # Create the PathSpec from lines using GitWildMatchPattern
+    return PathSpec.from_lines(GitWildMatchPattern, lines)
+
+def should_include_file(path, root_dir, gitignore_spec):
     """
-    Check if a given path matches any .gitignore pattern.
-    Patterns can include negations using '!'.
-    The last matching pattern (excluding negation) decides if excluded.
-    Negation (!pattern) re-includes files that would otherwise be excluded.
+    Return True if `path` is NOT excluded by .gitignore or .git directory.
+    We exclude anything inside a .git folder and anything matched by `gitignore_spec`.
     """
-    if not patterns:
-        return False
-
-    rel_path = os.path.relpath(path, root_dir)
-    rel_path = rel_path.replace('\\', '/')  # Normalize path for matching
-
-    excluded = False
-    for pat in patterns:
-        is_negation = pat.startswith('!')
-        p = pat[1:] if is_negation else pat
-        if pattern_matches(p, rel_path):
-            if is_negation:
-                # Negation flips the state to included
-                excluded = False
-            else:
-                excluded = True
-
-    return excluded
-
-def pattern_matches(pat, rel_path):
-    """Check if a single pattern matches the relative path."""
-    # If the pattern ends with '/', it matches a directory and its contents
-    if pat.endswith('/'):
-        dir_pattern = pat.rstrip('/')
-        if rel_path == dir_pattern or rel_path.startswith(dir_pattern + '/'):
-            return True
-    elif pat.startswith('/'):
-        anchor_pat = pat.lstrip('/')
-        if fnmatch.fnmatch(rel_path, anchor_pat):
-            return True
-    else:
-        if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(os.path.basename(rel_path), pat):
-            return True
-    return False
-
-def should_include_file(path, root_dir, gitignore_patterns):
-    """Determine if a file or directory should be included based on gitignore and .git filtering."""
+    # Exclude anything within .git
     if '.git' in path.split(os.sep):
         return False
-    if not gitignore_patterns:
-        # If no patterns given, treat as no exclusion
-        return True
-    return not matches_gitignore(path, root_dir, gitignore_patterns)
+
+    # Compare relative path to the pathspec
+    rel_path = os.path.relpath(path, root_dir).replace('\\', '/')
+
+    # If it's a directory, append trailing slash so 'subdir/' patterns match
+    if os.path.isdir(path) and not rel_path.endswith('/'):
+        rel_path += '/'
+
+    # If pathspec matches, that means "excluded," so we invert it
+    return not gitignore_spec.match_file(rel_path)
+

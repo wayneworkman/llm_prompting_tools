@@ -2,7 +2,7 @@
 
 ## Overview
 
-`dialog_opening.py` is a utility script that generates a `prompt.txt` file summarizing the contents of a given directory. The intent is to use this script to "open a dialog" with an LLM. The prompt.txt file can be fed into a Large Language Model (LLM) to ease starting a new dialog session with an LLM.
+`dialog_opening.py` is a utility script that generates a `prompt.txt` file summarizing the contents of a given directory. The intent is to use this script to "open a dialog" with an LLM. The `prompt.txt` file can be fed into a Large Language Model (LLM) to ease starting a new dialog session with an LLM.
 
 ## Features
 
@@ -15,9 +15,9 @@
 - **Special Prompt Instructions:**  
   The script includes a set of instructions at the beginning of the prompt, guiding the LLM to analyze the provided files for interoperability, potential issues, and suspicious code patterns like demos or stubs.
 
-- **Markdown & Non-Markdown Handling:**  
-  - Markdown files containing code fences are enclosed in START/END markers to prevent confusion with the prompt formatting.  
-  - Markdown files without triple backticks and all other files are enclosed in triple backticks, ensuring the LLM sees them as code or data blocks.
+- **Code Fence Handling for All Files:**  
+  - If **any** file (Markdown or otherwise) contains triple backticks (```) in its content, it is enclosed between **START/END** markers to prevent confusion when pasting into LLM prompts.  
+  - Files without triple backticks are enclosed in triple backticks so that the LLM interprets them as code or data blocks.
 
 ## Usage
 
@@ -52,7 +52,7 @@ When working with LLMs, providing context can significantly improve the quality 
 
 ## Testing
 
-Tests are in the tests directory. From the dialog_opening directory, you can run them with:
+Tests are in the `tests` directory. From the `dialog_opening` directory, you can run them with:
 
 ```bash
 python3 -m unittest discover tests

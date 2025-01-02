@@ -4,7 +4,12 @@ import tempfile
 import os
 import stat
 from unittest.mock import patch
+
 from lib.listing import recursive_list
+
+# Import pathspec so we can create an empty spec for tests
+from pathspec import PathSpec
+from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 class TestListing(unittest.TestCase):
     def setUp(self):
@@ -20,10 +25,14 @@ class TestListing(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def empty_gitignore_spec(self):
+        """Helper to return an empty PathSpec (no patterns)."""
+        return PathSpec.from_lines(GitWildMatchPattern, [])
+
     @patch('lib.listing.should_include_file', return_value=True)
     def test_recursive_list_all_included(self, mock_should_include):
-        gitignore_patterns = []
-        lines = recursive_list(self.root, self.root, gitignore_patterns)
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(self.root, self.root, gitignore_spec)
         joined = "\n".join(lines)
         self.assertIn("file1.txt", joined)
         self.assertIn("subdir:", joined)
@@ -32,14 +41,14 @@ class TestListing(unittest.TestCase):
     @patch('lib.listing.should_include_file')
     def test_recursive_list_excludes(self, mock_should_include):
         # Mock so that file2.txt is excluded
-        def side_effect(path, root_path, patterns):
+        def side_effect(path, root_path, spec):
             if 'file2.txt' in path:
                 return False
             return True
-        mock_should_include.side_effect = side_effect
 
-        gitignore_patterns = []
-        lines = recursive_list(self.root, self.root, gitignore_patterns)
+        mock_should_include.side_effect = side_effect
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(self.root, self.root, gitignore_spec)
         joined = "\n".join(lines)
         self.assertIn("file1.txt", joined)
         self.assertNotIn("file2.txt", joined)  # excluded
@@ -48,7 +57,8 @@ class TestListing(unittest.TestCase):
         # Test listing on an empty directory
         empty_dir = os.path.join(self.root, "empty")
         os.makedirs(empty_dir)
-        lines = recursive_list(empty_dir, empty_dir, [])
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(empty_dir, empty_dir, gitignore_spec)
         joined = "\n".join(lines)
         self.assertIn(os.path.abspath(empty_dir) + ":", joined)
         self.assertIn("total 0", joined)
@@ -62,7 +72,8 @@ class TestListing(unittest.TestCase):
         with open(file_path, 'w') as f:
             f.write("deep content")
 
-        lines = recursive_list(self.root, self.root, [])
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(self.root, self.root, gitignore_spec)
         joined = "\n".join(lines)
         self.assertIn("nested:", joined)
         self.assertIn("level1:", joined)
@@ -75,7 +86,8 @@ class TestListing(unittest.TestCase):
         link_source = os.path.join(self.root, "file1.txt")
         link_target = os.path.join(self.root, "link_to_file1")
         os.symlink(link_source, link_target)
-        lines = recursive_list(self.root, self.root, [])
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(self.root, self.root, gitignore_spec)
         joined = "\n".join(lines)
         # Should list link_to_file1 as well
         self.assertIn("link_to_file1", joined)
