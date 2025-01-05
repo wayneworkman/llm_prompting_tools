@@ -40,14 +40,6 @@ Nevertheless, this project is licensed under MIT. You should review your country
 
 ## Future Ideas
 
-### A Proper Package
-
-Consider evolving this collection into a proper Python package, complete with a `pyproject.toml`, command-line arguments, and/or a configuration file. Improvements could include:
-
-- Cross-platform compatibility
-- Versioning
-- Detailed installation instructions
-
 ### Unit Testing-Focused Tools
 
 Develop tools that target unit testing challenges in various languages. For example:
