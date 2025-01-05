@@ -1,9 +1,8 @@
-These are the special prompt instructions that guide the LLM in analyzing the provided files.
-
-Please carefully analyze each file, summarizing its purpose, how it interrelates with other files, and identify strengths or weaknesses in the code. Look specifically for:
+Please carefully analyze each file. Summarize its purpose, how it interrelates with other files, and identify strengths or weaknesses in the code. Look specifically for:
 
 - Code that may be demo or stubbed out and not production-ready.
 - Interoperability issues between modules.
 - Potential pitfalls in the directory structure or file organization.
+- Presence or absense of tests, and gaps in testing.
 
 Output a comprehensive summary, providing deeply detailed insights. Make it clear and structured.
