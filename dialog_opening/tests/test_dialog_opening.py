@@ -15,20 +15,30 @@ class TestDialogOpeningScript(unittest.TestCase):
         """
         If user does not specify --prompt-instructions,
         we default to 'prompt_instructions.txt' and read it if it exists.
+        We also now expect the default output file to be 'prompt.txt' in the current working directory.
         """
+        import sys
+        import os
+        from unittest.mock import patch, ANY
+        import dialog_opening
+
+        # Provide the path to the old top-level script (or any placeholder),
+        # so we can simulate running "python dialog_opening.py" with no arguments.
         test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
         with patch.object(sys, 'argv', [test_script]):
             with patch('builtins.print') as mock_print:
                 dialog_opening.main()
-                expected_output_file = os.path.join(os.path.dirname(dialog_opening.__file__), 'prompt.txt')
 
-                # We no longer expect prompt_instructions=None; we expect some string, but we don't care about exact text
+                # The new default: "prompt.txt" in the user's current directory
+                expected_output_file = os.path.join(os.getcwd(), "prompt.txt")
+
                 mock_generate_prompt.assert_called_once_with(
                     input_dir='.',
                     output_file=expected_output_file,
-                    prompt_instructions=ANY  # We assume the file was found and read
+                    prompt_instructions=ANY
                 )
                 mock_print.assert_any_call(expected_output_file + " generated successfully.")
+
 
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=False)
@@ -36,20 +46,31 @@ class TestDialogOpeningScript(unittest.TestCase):
         """
         If user does not specify --prompt-instructions AND prompt_instructions.txt doesn't exist,
         we do NOT fail, but pass an empty string as instructions.
+        We also expect the default output file to be prompt.txt in the current working directory.
         """
+        import sys
+        import os
+        from unittest.mock import patch
+        import dialog_opening
+
         test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
         with patch.object(sys, 'argv', [test_script]):
             with patch('builtins.print') as mock_print:
                 dialog_opening.main()
-                expected_output_file = os.path.join(os.path.dirname(dialog_opening.__file__), 'prompt.txt')
 
-                # If the file does not exist, we pass an empty string for prompt_instructions
+                # Now we expect the default output file to be "prompt.txt" in os.getcwd()
+                expected_output_file = os.path.join(os.getcwd(), "prompt.txt")
+
                 mock_generate_prompt.assert_called_once_with(
                     input_dir='.',
                     output_file=expected_output_file,
                     prompt_instructions=""
                 )
+
+                # Confirm we printed "generated successfully" message too
                 mock_print.assert_any_call(expected_output_file + " generated successfully.")
+
+
 
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=False)
