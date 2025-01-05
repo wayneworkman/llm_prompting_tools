@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# dialog_opening.py
+# __init__.py
 
 import os
 import argparse
@@ -27,11 +27,11 @@ def main():
         "--prompt-instructions",
         default="prompt_instructions.txt",
         help=(
-        "Path to a file containing additional prompt instructions. "
-        "Defaults to 'prompt_instructions.txt' in the current directory. "
-        "If it’s the default and not found, no error is raised (the file is simply not included). "
-        "If you specify a different file and it’s not found, the script exits with an error."
-    )
+            "Path to a file containing additional prompt instructions. "
+            "Defaults to 'prompt_instructions.txt' in the current directory. "
+            "If it’s the default and not found, no error is raised (the file is simply not included). "
+            "If you specify a different file and it’s not found, the script exits with an error."
+        )
     )
 
     args = parser.parse_args()
@@ -93,6 +93,3 @@ def main():
     except PermissionError as e:
         print(str(e))
         sys.exit(1)
-
-if __name__ == "__main__":
-    main()

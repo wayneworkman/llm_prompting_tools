@@ -1,5 +1,4 @@
 [build-system]
-# Minimum requirements to build and install this project
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
@@ -41,3 +40,15 @@ dependencies = [
 
 [project.scripts]
 dialog_opening = "dialog_opening:main"
+
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dialog_opening", "lib"]
+exclude = [
+  "tests",
+  "*.tests",
+  "tests.*",
+  "dist",
+  "build"
+]

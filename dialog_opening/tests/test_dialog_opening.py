@@ -7,6 +7,7 @@ import tempfile
 import shutil
 import dialog_opening
 
+
 class TestDialogOpeningScript(unittest.TestCase):
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=True)
