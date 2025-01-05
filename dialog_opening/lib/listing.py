@@ -1,5 +1,4 @@
 # lib/listing.py (place in ./lib/listing.py)
-
 import os
 from lib.gitignore_utils import should_include_file
 from lib.file_info import format_file_line
@@ -15,14 +14,22 @@ def recursive_list(root_dir, root_path, gitignore_spec):
     return lines
 
 def get_directory_entries(root_dir, root_path, gitignore_spec):
-    """Get directory entries that should be included."""
+    """
+    Get directory entries that should be included.
+    Handles PermissionError by returning an empty list (skip).
+    """
     entries = []
-    with os.scandir(root_dir) as it:
-        for entry in it:
-            full_path = os.path.join(root_dir, entry.name)
-            if not should_include_file(full_path, root_path, gitignore_spec):
-                continue
-            entries.append(entry)
+    try:
+        with os.scandir(root_dir) as it:
+            for entry in it:
+                full_path = os.path.join(root_dir, entry.name)
+                if not should_include_file(full_path, root_path, gitignore_spec):
+                    continue
+                entries.append(entry)
+    except PermissionError:
+        # If we can't read this directory, skip it entirely
+        return []
+
     # Sort by modification time (newest first)
     entries.sort(key=lambda e: e.stat(follow_symlinks=False).st_mtime, reverse=True)
     return entries

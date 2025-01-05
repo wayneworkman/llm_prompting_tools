@@ -120,5 +120,38 @@ class TestGitignoreUtils(unittest.TestCase):
         self.assertTrue(should_include_file(os.path.join(self.root, "a", "temp", "keep_me.tmp"), self.root, gitignore_spec))
 
 
+    def test_nested_gitignore(self):
+        """
+        Confirm that only the top-level .gitignore is loaded under the current implementation.
+        We place another .gitignore in a subdir and show that patterns from the subdir
+        are not recognized, since load_gitignore_spec only checks the root.
+        """
+        top_gitignore_path = os.path.join(self.root, '.gitignore')
+        with open(top_gitignore_path, 'w') as f:
+            f.write("*.pyc\n")
+
+        os.makedirs(os.path.join(self.root, "subdir"))
+        sub_gitignore_path = os.path.join(self.root, "subdir", ".gitignore")
+        with open(sub_gitignore_path, 'w') as f:
+            f.write("*.txt\n")  # This won't be respected by the current load_gitignore_spec
+
+        # Put a .pyc file at root (excluded by top-level .gitignore)
+        pyc_file = os.path.join(self.root, "something.pyc")
+        with open(pyc_file, 'w') as f:
+            f.write("fake pyc")
+
+        # Put a .txt file in subdir (would be excluded if subdir .gitignore was recognized)
+        txt_file = os.path.join(self.root, "subdir", "hello.txt")
+        with open(txt_file, 'w') as f:
+            f.write("some text")
+
+        spec = load_gitignore_spec(self.root)
+        # The top-level .pyc pattern should exclude the .pyc file
+        self.assertFalse(should_include_file(pyc_file, self.root, spec))
+
+        # The subdir pattern *.txt was not loaded, so it should NOT exclude hello.txt
+        self.assertTrue(should_include_file(txt_file, self.root, spec),
+                        msg="The subdir .gitignore is not recognized, so .txt is not excluded under current logic.")
+
 if __name__ == '__main__':
     unittest.main()

@@ -3,8 +3,9 @@
 import os
 from lib.listing import recursive_list
 from lib.gitignore_utils import load_gitignore_spec, should_include_file
+from lib.detect_file_type import is_binary_file
 
-def generate_prompt(input_dir, output_file):
+def generate_prompt(input_dir, output_file, prompt_instructions=None):
     # Check directory existence
     if not os.path.isdir(input_dir):
         raise FileNotFoundError("Directory not found")
@@ -18,12 +19,6 @@ def generate_prompt(input_dir, output_file):
 
     # Load the .gitignore as a PathSpec
     gitignore_spec = load_gitignore_spec(input_dir)
-
-    special_instructions_path = os.path.join(input_dir, "SPECIAL_PROMPT_INSTRUCTIONS.txt")
-    special_instructions = ""
-    if os.path.isfile(special_instructions_path):
-        with open(special_instructions_path, 'r', encoding='utf-8', errors='replace') as f:
-            special_instructions = f.read().strip()
 
     # Build the directory listing lines, respecting the .gitignore
     listing_lines = recursive_list(input_dir, input_dir, gitignore_spec)
@@ -49,32 +44,42 @@ def generate_prompt(input_dir, output_file):
     #   1) markdown with fences
     #   2) markdown without fences
     #   3) non-markdown
-    # But now, we wrap any file containing triple backticks in special markers.
+    # Also skip content for truly binary files.
     with_code_fences = []
     without_code_fences = []
     non_markdown = []
 
     for fpath in included_files:
         rel_name = os.path.relpath(fpath, input_dir)
+        if is_binary_file(fpath):
+            # We'll enclose the file name in the final output but exclude contents
+            if is_markdown_file(rel_name):
+                with_code_fences.append((rel_name, None, True))
+            else:
+                non_markdown.append((rel_name, None, True))
+            continue
+
+        # If we got here, it's text, so let's read the file content
         with open(fpath, 'rb') as fb:
             content_bytes = fb.read()
         content = content_bytes.decode('utf-8', 'replace')
 
+        # Now check if it's markdown and if it has code fences
         if is_markdown_file(rel_name):
             if has_code_fences(content):
-                with_code_fences.append((rel_name, content))
+                with_code_fences.append((rel_name, content, False))
             else:
-                without_code_fences.append((rel_name, content))
+                without_code_fences.append((rel_name, content, False))
         else:
-            non_markdown.append((rel_name, content))
+            non_markdown.append((rel_name, content, False))
 
-    # Maintain the original order: markdown w/ fences -> markdown w/o -> non-markdown
     file_sections = with_code_fences + without_code_fences + non_markdown
 
-    # Write the prompt file
+    # Write the prompt
     with open(output_file, 'w', encoding='utf-8', errors='replace') as out:
-        if special_instructions:
-            out.write(special_instructions + "\n\n")
+        # If there are custom instructions, include them
+        if prompt_instructions:
+            out.write(prompt_instructions + "\n\n")
 
         out.write("Below is the directory structure:\n```\n")
         for line in listing_lines:
@@ -83,18 +88,19 @@ def generate_prompt(input_dir, output_file):
 
         out.write("Below are the file contents:\n\n")
 
-        # Now *any* file with triple backticks gets START/END fences:
-        for (rel_name, content) in file_sections:
+        for (rel_name, content, is_binary) in file_sections:
             out.write(rel_name + "\n")
-            if has_code_fences(content):
-                # Updated text to remove "MARKDOWN"
-                out.write("START OF FILE WITH CODE FENCES\n")
-                out.write(content)
-                out.write("\nEND OF FILE WITH CODE FENCES\n\n")
+            if is_binary:
+                out.write("```BINARY FILE CONTENTS EXCLUDED```\n\n")
             else:
-                out.write("```\n")
-                out.write(content)
-                out.write("\n```\n\n")
+                if has_code_fences(content):
+                    out.write("START OF FILE WITH CODE FENCES\n")
+                    out.write(content)
+                    out.write("\nEND OF FILE WITH CODE FENCES\n\n")
+                else:
+                    out.write("```\n")
+                    out.write(content)
+                    out.write("\n```\n\n")
 
 
 def find_file_path(root, filename):

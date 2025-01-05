@@ -1,0 +1,43 @@
+[build-system]
+# Minimum requirements to build and install this project
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dialog_opening"
+version = "0.1.0"
+description = "A CLI tool that generates a prompt file summarizing a directory for LLMs."
+readme = "README.md"
+requires-python = ">=3.6"
+license = "MIT"
+
+authors = [
+  { name = "Wayne Workman", email = "wayne@theworkmans.us" }
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.6",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+]
+
+keywords = ["cli", "prompt", "llm"]
+
+dependencies = [
+  "pathspec>=0.8.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/wayneworkman/llm_prompting_tools/tree/main/dialog_opening"
+"Bug Tracker" = "https://github.com/wayneworkman/llm_prompting_tools/issues"
+
+[project.scripts]
+dialog_opening = "dialog_opening:main"

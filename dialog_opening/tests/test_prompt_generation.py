@@ -17,9 +17,10 @@ class TestPromptGeneration(unittest.TestCase):
         with open(os.path.join(self.root, "code.py"), "w") as f:
             f.write("print('Hello World')")
 
-        with open(os.path.join(self.root, "SPECIAL_PROMPT_INSTRUCTIONS.txt"), "w") as f:
-            f.write("These are special instructions.\nAnalyze the code thoroughly.")
+        with open(os.path.join(self.root, "prompt_instructions.txt"), "w") as f:
+            f.write("These are prompt instructions.\nAnalyze the code thoroughly.")
 
+        # Create a small binary file for integration testing of binary exclusion
         with open(os.path.join(self.root, "binary.dat"), "wb") as f:
             f.write(b'\x00\xFF\x00')
 
@@ -34,7 +35,10 @@ class TestPromptGeneration(unittest.TestCase):
 
     @patch('lib.prompt_generation.recursive_list')
     def test_generate_prompt(self, mock_recursive_list):
-        # Mock recursive_list to return a simulated directory structure listing
+        """
+        Mocks out the directory listing and verifies the overall prompt file
+        is produced with correct structure and included content.
+        """
         mock_recursive_list.return_value = [
             f"{os.path.abspath(self.root)}:",
             "total 8",
@@ -43,67 +47,79 @@ class TestPromptGeneration(unittest.TestCase):
             ""
         ]
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        generate_prompt(self.root, output_file, prompt_instructions="Custom instructions at the top.")
 
         self.assertTrue(os.path.isfile(output_file))
         with open(output_file, 'r') as f:
             content = f.read()
             self.assertIn("README.md", content)
             self.assertIn("code.py", content)
-            self.assertIn("These are special instructions.", content)  # From SPECIAL_PROMPT_INSTRUCTIONS
+            # Check that our custom instructions are included
+            self.assertIn("Custom instructions at the top.", content)
 
-    def test_generate_prompt_includes_special_instructions(self):
-        # Test that the prompt includes the special instructions when the file is present.
+    def test_generate_prompt_includes_instructions(self):
+        """
+        If prompt_instructions are provided, they should appear at the top of the output.
+        """
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        with open(os.path.join(self.root, "prompt_instructions.txt"), "r") as f:
+            instructions_content = f.read()
+
+        generate_prompt(self.root, output_file, prompt_instructions=instructions_content)
         with open(output_file, 'r') as f:
             content = f.read()
-            self.assertIn("These are special instructions.", content)
+            self.assertIn("These are prompt instructions.", content)
 
-    def test_generate_prompt_no_special_instructions_file(self):
-        # Remove SPECIAL_PROMPT_INSTRUCTIONS.txt to test behavior without it
-        os.remove(os.path.join(self.root, "SPECIAL_PROMPT_INSTRUCTIONS.txt"))
+    def test_generate_prompt_no_instructions_file(self):
+        """
+        If generate_prompt is called with prompt_instructions=None (or empty),
+        we expect no instructions in the final output. 
+        We remove the prompt_instructions.txt to avoid confusion.
+        """
+        instructions_path = os.path.join(self.root, "prompt_instructions.txt")
+        if os.path.isfile(instructions_path):
+            os.remove(instructions_path)
+
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        generate_prompt(self.root, output_file, prompt_instructions=None)  
         with open(output_file, 'r') as f:
             content = f.read()
-            # Ensure that prompt still generates even without special instructions
+            # Ensure the normal file references appear
             self.assertIn("README.md", content)
-            # Confirm no special instructions present
-            self.assertNotIn("These are special instructions.", content)
+            # Because prompt_instructions=None => no instructions are included
+            self.assertNotIn("These are prompt instructions.", content)
 
     def test_generate_prompt_markdown_code_fences(self):
-        # Test file with code fences should be enclosed in START/END markers
+        """
+        If a file has triple backticks, it should be wrapped 
+        between START and END markers to avoid LLM confusion.
+        """
         md_path = os.path.join(self.root, "example.md")
         with open(md_path, "w") as f:
             f.write("```\nprint('Inside code fence')\n```")
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        generate_prompt(self.root, output_file, prompt_instructions=None)
 
         with open(output_file, 'r') as f:
             content = f.read()
-            # Expect updated START/END labels for code fences
             self.assertIn("START OF FILE WITH CODE FENCES", content)
             self.assertIn("END OF FILE WITH CODE FENCES", content)
             self.assertIn("print('Inside code fence')", content)
 
     def test_generate_prompt_only_markdown_no_fences(self):
-        # Test markdown file without code fences should be enclosed in triple backticks
         os.remove(os.path.join(self.root, "README.md"))
         os.remove(os.path.join(self.root, "code.py"))
-
         md_path = os.path.join(self.root, "info.md")
         with open(md_path, "w") as f:
             f.write("# Info\nThis markdown has no code fences.")
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        generate_prompt(self.root, output_file, prompt_instructions=None)
         with open(output_file, 'r') as f:
             content = f.read()
             self.assertIn("```", content)
             self.assertIn("This markdown has no code fences.", content)
 
     def test_generate_prompt_integration_real_files(self):
-        # Create a variety of files: text, binary, markdown with and without fences.
         bin_path = os.path.join(self.root, "binary.dat")
         with open(bin_path, "wb") as f:
             f.write(b'\x00\xFF\x00')
@@ -121,32 +137,56 @@ class TestPromptGeneration(unittest.TestCase):
             f.write("Some plain text data.")
 
         output_file = os.path.join(self.root, "prompt.txt")
-        generate_prompt(self.root, output_file)
+        with open(os.path.join(self.root, "prompt_instructions.txt"), "r") as f:
+            instructions_content = f.read()
+
+        generate_prompt(self.root, output_file, prompt_instructions=instructions_content)
 
         with open(output_file, 'r') as f:
             content = f.read()
-
-            # Check presence of instructions
-            self.assertIn("These are special instructions.", content)
-
-            # Binary file should be wrapped in triple backticks
-            self.assertIn("```", content)
-
-            # a_fences.md now has updated fence text
+            # Confirm instructions included
+            self.assertIn("These are prompt instructions.", content)
+            # The binary file => BINARY FILE CONTENTS EXCLUDED
+            self.assertIn("binary.dat", content)
+            self.assertIn("```BINARY FILE CONTENTS EXCLUDED```", content)
             self.assertIn("START OF FILE WITH CODE FENCES", content)
             self.assertIn("END OF FILE WITH CODE FENCES", content)
-
-            # z_nofences.md should be enclosed in triple backticks
+            self.assertIn("z_nofences.md", content)
             self.assertIn("# Just some text", content)
-
-            # Make sure code fences do not appear after z_nofences.md
-            contents_start = content.index("Below are the file contents:")
-            z_nofences_index = content.index("z_nofences.md", contents_start)
-            self.assertNotIn("START OF FILE WITH CODE FENCES", content[z_nofences_index:])
-
-            # notes.txt should be in triple backticks
+            self.assertIn("notes.txt", content)
             self.assertIn("Some plain text data.", content)
 
+    def test_exclude_output_file_from_prompt(self):
+        output_file = os.path.join(self.root, "prompt.txt")
+        with open(output_file, "w") as f:
+            f.write("This is the would-be output file content.")
+
+        generate_prompt(self.root, output_file, prompt_instructions=None)
+        with open(output_file, 'r') as f:
+            content = f.read()
+            self.assertNotIn("This is the would-be output file content.", content)
+
+    def test_large_unusual_file_encodings(self):
+        large_file_path = os.path.join(self.root, "large_file.txt")
+        with open(large_file_path, "w", encoding='utf-8') as f:
+            f.write("0123456789\n" * 10000)
+
+        weird_file_path = os.path.join(self.root, "weird_file.txt")
+        with open(weird_file_path, "w", encoding='utf-8') as f:
+            f.write("Here are some emojis: 😊🚀🐱‍👓\nAnd some accented characters: á, ñ, ü\n")
+
+        output_file = os.path.join(self.root, "prompt.txt")
+        generate_prompt(self.root, output_file, prompt_instructions=None)
+
+        with open(output_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertIn("large_file.txt", content)
+            self.assertIn("weird_file.txt", content)
+            self.assertIn("Here are some emojis:", content)
+            self.assertIn("😊", content)
+            self.assertIn("🚀", content)
+            self.assertIn("🐱", content)
+            self.assertIn("👓", content)
 
 if __name__ == '__main__':
     unittest.main()

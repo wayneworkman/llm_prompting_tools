@@ -6,7 +6,6 @@ import stat
 from unittest.mock import patch
 
 from lib.listing import recursive_list
-
 # Import pathspec so we can create an empty spec for tests
 from pathspec import PathSpec
 from pathspec.patterns.gitwildmatch import GitWildMatchPattern
@@ -91,6 +90,46 @@ class TestListing(unittest.TestCase):
         joined = "\n".join(lines)
         # Should list link_to_file1 as well
         self.assertIn("link_to_file1", joined)
+
+
+    @unittest.skipIf(os.name == 'nt', "Permissions differ on Windows. Skipping.")
+    def test_recursive_list_no_permission(self):
+        """
+        Simulate a subdirectory that can't be read (permission denied).
+        We'll attempt to list it and see if we handle that gracefully
+        (either skipping or failing in a controlled way).
+        """
+        restricted_dir = os.path.join(self.root, "restricted")
+        os.makedirs(restricted_dir)
+        # Remove read/execute permission
+        os.chmod(restricted_dir, 0o000)
+
+        try:
+            gitignore_spec = self.empty_gitignore_spec()
+            lines = recursive_list(self.root, self.root, gitignore_spec)
+            # Behavior might vary: We might not see the restricted folder details.
+            # Check that we do NOT crash or produce an unhandled exception.
+            # We'll just see if the code completes without error.
+            joined = "\n".join(lines)
+            # It's possible the listing won't show restricted or might show it with 'total 0'
+            # We won't assume a certain presence. The key is no crash.
+            self.assertTrue(True, "Listing completed without crashing despite no permission.")
+        finally:
+            # Restore permission so cleanup doesn't fail
+            os.chmod(restricted_dir, 0o700)
+
+    @unittest.skipIf(os.name == 'nt', "Symlinks are not always enabled on Windows by default.")
+    def test_recursive_list_broken_symlink(self):
+        """
+        Create a symlink pointing nowhere and ensure we don't break the listing process.
+        """
+        broken_link = os.path.join(self.root, "broken_link")
+        os.symlink("/nonexistent/path/really_broken", broken_link)
+        gitignore_spec = self.empty_gitignore_spec()
+        lines = recursive_list(self.root, self.root, gitignore_spec)
+        # As long as it doesn't crash, that's our pass condition.
+        self.assertTrue(any("broken_link" in line for line in lines),
+                        msg="Broken symlink should appear in the listing (or at least not crash).")
 
 if __name__ == '__main__':
     unittest.main()
