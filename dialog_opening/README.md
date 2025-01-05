@@ -1,8 +1,8 @@
-# dialog_opening.py
+# dialog_opening
 
 ## Overview
 
-`dialog_opening.py` is a command-line tool that generates a `prompt.txt` file summarizing the contents of a given directory. The intent is to use this tool to "open a dialog" with an LLM by providing relevant context. The `prompt.txt` file can be fed into a Large Language Model (LLM) to ease starting a new dialog session.
+`dialog_opening` is a command-line tool that generates a `prompt.txt` file summarizing the contents of a given directory. The intent is to use this tool to "open a dialog" with an LLM by providing relevant context. The `prompt.txt` file can be fed into a Large Language Model (LLM) to ease starting a new dialog session.
 
 ## Features
 
