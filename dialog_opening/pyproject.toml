@@ -9,7 +9,7 @@ version = "0.1.0"
 description = "A CLI tool that generates a prompt file summarizing a directory for LLMs."
 readme = "README.md"
 requires-python = ">=3.6"
-license = "MIT"
+license = { text = "MIT" }
 
 authors = [
   { name = "Wayne Workman", email = "wayne@theworkmans.us" }
