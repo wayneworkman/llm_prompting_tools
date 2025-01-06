@@ -9,6 +9,38 @@ import dialog_opening
 
 
 class TestDialogOpeningScript(unittest.TestCase):
+    @patch('importlib.metadata')
+    def test_version_argument(self, mock_importlib):
+        """Test that --version shows the correct version and exits."""
+        mock_importlib.version.return_value = "0.2.0"
+        test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
+        
+        with patch.object(sys, 'argv', [test_script, '--version']):
+            with patch('sys.stdout', new=tempfile.SpooledTemporaryFile(mode='w+')) as stdout:
+                try:
+                    dialog_opening.main()
+                except SystemExit as e:
+                    self.assertEqual(e.code, 0)  # Should exit successfully
+                
+                stdout.seek(0)
+                output = stdout.read().strip()
+                expected_output = "dialog_opening 0.2.0"
+                self.assertEqual(output, expected_output)  # Version should be in output
+
+    
+    @patch('importlib.metadata')
+    def test_version_not_found(self, mock_importlib):
+        """Test graceful handling when version cannot be determined."""
+        mock_importlib.version.side_effect = ModuleNotFoundError
+        test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
+        
+        with patch.object(sys, 'argv', [test_script, '--version']):
+            with patch('sys.stdout', new=tempfile.SpooledTemporaryFile(mode='w+')) as stdout:
+                with self.assertRaises(SystemExit) as cm:
+                    dialog_opening.main()
+                self.assertEqual(cm.exception.code, 0)  # Should still exit successfully
+    
+
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=True)
     def test_default_arguments(self, mock_isfile, mock_generate_prompt):
@@ -17,13 +49,6 @@ class TestDialogOpeningScript(unittest.TestCase):
         we default to 'prompt_instructions.txt' and read it if it exists.
         We also now expect the default output file to be 'prompt.txt' in the current working directory.
         """
-        import sys
-        import os
-        from unittest.mock import patch, ANY
-        import dialog_opening
-
-        # Provide the path to the old top-level script (or any placeholder),
-        # so we can simulate running "python dialog_opening.py" with no arguments.
         test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
         with patch.object(sys, 'argv', [test_script]):
             with patch('builtins.print') as mock_print:
@@ -39,7 +64,6 @@ class TestDialogOpeningScript(unittest.TestCase):
                 )
                 mock_print.assert_any_call(expected_output_file + " generated successfully.")
 
-
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=False)
     def test_default_arguments_no_file(self, mock_isfile, mock_generate_prompt):
@@ -48,11 +72,6 @@ class TestDialogOpeningScript(unittest.TestCase):
         we do NOT fail, but pass an empty string as instructions.
         We also expect the default output file to be prompt.txt in the current working directory.
         """
-        import sys
-        import os
-        from unittest.mock import patch
-        import dialog_opening
-
         test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
         with patch.object(sys, 'argv', [test_script]):
             with patch('builtins.print') as mock_print:
@@ -69,8 +88,6 @@ class TestDialogOpeningScript(unittest.TestCase):
 
                 # Confirm we printed "generated successfully" message too
                 mock_print.assert_any_call(expected_output_file + " generated successfully.")
-
-
 
     @patch('dialog_opening.generate_prompt')
     @patch('os.path.isfile', return_value=False)

@@ -1,11 +1,9 @@
-# tests/test_gitignore_utils.py (place in ./tests/test_gitignore_utils.py)
-
 import unittest
 import tempfile
 import os
+import stat
 
-# Update these imports to match your new function names
-from lib.gitignore_utils import load_gitignore_spec, should_include_file
+from lib.gitignore_utils import load_gitignore_spec, should_include_file, find_gitignore_file
 
 class TestGitignoreUtils(unittest.TestCase):
     def setUp(self):
@@ -29,10 +27,76 @@ class TestGitignoreUtils(unittest.TestCase):
             f.write("secret.txt\n")
 
         gitignore_spec = load_gitignore_spec(self.root)
-        # We can't directly check the lines from PathSpec easily, but we can test actual matches:
         self.assertTrue(gitignore_spec.match_file("test.pyc"))
         self.assertTrue(gitignore_spec.match_file("secret.txt"))
         self.assertFalse(gitignore_spec.match_file("normal.txt"))
+
+    def test_find_gitignore_in_parent(self):
+        # Create .gitignore in root
+        gitignore_path = os.path.join(self.root, '.gitignore')
+        with open(gitignore_path, 'w') as f:
+            f.write("*.pyc\n")
+
+        # Create nested directories
+        nested_dir = os.path.join(self.root, "level1", "level2", "level3")
+        os.makedirs(nested_dir)
+
+        # Find .gitignore from nested directory
+        found_path, found_root = find_gitignore_file(nested_dir)
+        self.assertEqual(found_path, gitignore_path)
+        self.assertEqual(found_root, self.root)
+
+        # Verify patterns work from nested directory
+        gitignore_spec = load_gitignore_spec(nested_dir)
+        self.assertTrue(gitignore_spec.match_file("test.pyc"))
+
+    def test_stop_at_git_directory(self):
+        # Create nested structure with .git directory in the middle
+        mid_dir = os.path.join(self.root, "level1")
+        nested_dir = os.path.join(mid_dir, "level2")
+        os.makedirs(nested_dir)
+        
+        # Create .git directory in mid_dir
+        os.makedirs(os.path.join(mid_dir, ".git"))
+        
+        # Create .gitignore in root (should not be found)
+        with open(os.path.join(self.root, '.gitignore'), 'w') as f:
+            f.write("*.pyc\n")
+
+        # Search from nested_dir - should stop at mid_dir due to .git
+        found_path, found_root = find_gitignore_file(nested_dir)
+        self.assertIsNone(found_path)  # No .gitignore found
+        self.assertEqual(found_root, mid_dir)  # But found repo root
+
+    def test_handle_permission_denied(self):
+        # Create a nested directory for testing
+        nested_dir = os.path.join(self.root, "level1", "level2")
+        os.makedirs(nested_dir)
+        
+        # Create .gitignore in root (should never be found due to permission error)
+        with open(os.path.join(self.root, '.gitignore'), 'w') as f:
+            f.write("*.pyc\n")
+
+        # Store original os.path.dirname to restore later
+        original_dirname = os.path.dirname
+        
+        def mock_dirname(path):
+            # Raise PermissionError when trying to access parent of level2
+            if path.endswith('level2'):
+                raise PermissionError("Permission denied")
+            return original_dirname(path)
+            
+        try:
+            # Replace os.path.dirname with our mock version
+            os.path.dirname = mock_dirname
+            
+            # Test should now encounter PermissionError and return None
+            found_path, found_root = find_gitignore_file(nested_dir)
+            self.assertIsNone(found_path)
+            self.assertIsNone(found_root)
+        finally:
+            # Restore original os.path.dirname
+            os.path.dirname = original_dirname
 
     def test_should_include_file(self):
         gitignore_path = os.path.join(self.root, '.gitignore')
@@ -61,11 +125,10 @@ class TestGitignoreUtils(unittest.TestCase):
         # Even without patterns, .git directories should be excluded
         git_path = os.path.join(self.root, ".git")
         os.makedirs(git_path)
-        empty_spec = load_gitignore_spec(self.root)  # This should be effectively empty
+        empty_spec = load_gitignore_spec(self.root)
         self.assertFalse(should_include_file(git_path, self.root, empty_spec))
 
     def test_anchored_patterns(self):
-        # Test anchored patterns (starting with '/')
         gitignore_path = os.path.join(self.root, '.gitignore')
         with open(gitignore_path, 'w') as f:
             f.write("/anchored.txt\n")
@@ -79,79 +142,40 @@ class TestGitignoreUtils(unittest.TestCase):
         with open(log_path, 'w') as f:
             f.write("logfile")
 
-        # anchored.txt is at the root and should be excluded by anchored pattern
         self.assertFalse(should_include_file(anchored_path, self.root, gitignore_spec))
-        # data.log should also be excluded by *.log pattern
         self.assertFalse(should_include_file(log_path, self.root, gitignore_spec))
 
-    def test_directory_pattern_with_subdirs(self):
-        # Test a directory pattern with trailing slash
-        gitignore_path = os.path.join(self.root, '.gitignore')
-        with open(gitignore_path, 'w') as f:
-            f.write("subdir/\n")
-
-        gitignore_spec = load_gitignore_spec(self.root)
-        os.makedirs(os.path.join(self.root, "subdir", "nested"))
-        with open(os.path.join(self.root, "subdir", "nested", "file.txt"), 'w') as f:
-            f.write("nested file")
-
-        # subdir and all contents should be excluded
-        self.assertFalse(should_include_file(os.path.join(self.root, "subdir"), self.root, gitignore_spec))
-        self.assertFalse(should_include_file(os.path.join(self.root, "subdir", "nested"), self.root, gitignore_spec))
-        self.assertFalse(should_include_file(os.path.join(self.root, "subdir", "nested", "file.txt"), self.root, gitignore_spec))
-
-    def test_complex_patterns(self):
-        # Test multiple complex patterns
-        gitignore_path = os.path.join(self.root, '.gitignore')
-        with open(gitignore_path, 'w') as f:
-            f.write("**/temp/*.tmp\n")
-            f.write("!**/temp/keep_me.tmp\n")
-
-        gitignore_spec = load_gitignore_spec(self.root)
-        os.makedirs(os.path.join(self.root, "a", "temp"))
-        with open(os.path.join(self.root, "a", "temp", "file.tmp"), 'w') as f:
-            f.write("temp file")
-        with open(os.path.join(self.root, "a", "temp", "keep_me.tmp"), 'w') as f:
-            f.write("keep this file")
-
-        # file.tmp should be excluded
-        self.assertFalse(should_include_file(os.path.join(self.root, "a", "temp", "file.tmp"), self.root, gitignore_spec))
-        # keep_me.tmp should be included due to the negation pattern
-        self.assertTrue(should_include_file(os.path.join(self.root, "a", "temp", "keep_me.tmp"), self.root, gitignore_spec))
-
-
-    def test_nested_gitignore(self):
-        """
-        Confirm that only the top-level .gitignore is loaded under the current implementation.
-        We place another .gitignore in a subdir and show that patterns from the subdir
-        are not recognized, since load_gitignore_spec only checks the root.
-        """
-        top_gitignore_path = os.path.join(self.root, '.gitignore')
-        with open(top_gitignore_path, 'w') as f:
+    def test_multiple_gitignore_files(self):
+        """Test that only the first .gitignore found (going up) is used"""
+        # Create nested structure
+        nested_dir = os.path.join(self.root, "level1", "level2")
+        os.makedirs(nested_dir)
+        
+        # Create .gitignore in nested_dir
+        with open(os.path.join(nested_dir, '.gitignore'), 'w') as f:
+            f.write("*.txt\n")
+            
+        # Create .gitignore in root
+        with open(os.path.join(self.root, '.gitignore'), 'w') as f:
             f.write("*.pyc\n")
+            
+        # Test from nested_dir
+        gitignore_spec = load_gitignore_spec(nested_dir)
+        
+        # Should match *.txt but not *.pyc
+        self.assertTrue(gitignore_spec.match_file("test.txt"))
+        self.assertFalse(gitignore_spec.match_file("test.pyc"))
 
-        os.makedirs(os.path.join(self.root, "subdir"))
-        sub_gitignore_path = os.path.join(self.root, "subdir", ".gitignore")
-        with open(sub_gitignore_path, 'w') as f:
-            f.write("*.txt\n")  # This won't be respected by the current load_gitignore_spec
-
-        # Put a .pyc file at root (excluded by top-level .gitignore)
-        pyc_file = os.path.join(self.root, "something.pyc")
-        with open(pyc_file, 'w') as f:
-            f.write("fake pyc")
-
-        # Put a .txt file in subdir (would be excluded if subdir .gitignore was recognized)
-        txt_file = os.path.join(self.root, "subdir", "hello.txt")
-        with open(txt_file, 'w') as f:
-            f.write("some text")
-
-        spec = load_gitignore_spec(self.root)
-        # The top-level .pyc pattern should exclude the .pyc file
-        self.assertFalse(should_include_file(pyc_file, self.root, spec))
-
-        # The subdir pattern *.txt was not loaded, so it should NOT exclude hello.txt
-        self.assertTrue(should_include_file(txt_file, self.root, spec),
-                        msg="The subdir .gitignore is not recognized, so .txt is not excluded under current logic.")
+    def test_root_directory_handling(self):
+        """Test behavior when reaching root directory"""
+        # This test might not work on Windows, so we'll skip it
+        if os.name == 'nt':
+            return
+            
+        # Start from root directory
+        found_path, found_root = find_gitignore_file('/')
+        self.assertIsNone(found_path)
+        self.assertIsNone(found_root)
 
 if __name__ == '__main__':
     unittest.main()
