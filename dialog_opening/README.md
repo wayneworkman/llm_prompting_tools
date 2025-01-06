@@ -14,9 +14,18 @@
 
 - **Configurable Prompt Instructions File:**  
   - If you **do not** specify `--prompt-instructions`, by default the tool checks for a file named `prompt_instructions.txt` in your current working directory.  
-    - If it’s found, it is automatically included.  
-    - If it’s **not** found, no error is raised, and no special instructions are included.  
+    - If it's found, it is automatically included.  
+    - If it's **not** found, no error is raised, and no special instructions are included.  
   - If you **do** specify a file with `--prompt-instructions` (i.e. a **non-default** path) but that file does **not** exist, the tool **raises an error** and exits.  
+
+- **Intelligent .gitignore Discovery:**
+  - The tool intelligently locates the appropriate .gitignore file by:
+    - First checking the current working directory
+    - If no .gitignore is found, checks for a .git directory (which indicates repository root)
+    - If no .git directory is found, looks in parent directories recursively
+    - Stops searching if either a .gitignore file or .git directory is found
+    - Handles permission errors gracefully by stopping the search
+  - This enables you to run the tool from any subdirectory within a repository while still honoring the repository's root .gitignore file
 
 - **Code Fence Handling for All Files:**  
   - If **any** file (Markdown or otherwise) contains triple backticks (```), it is enclosed between **START/END** markers to prevent confusion when pasting into LLM prompts.  
@@ -37,7 +46,7 @@ dialog_opening --input-dir /path/to/project --output-file /path/to/output/prompt
 - `--prompt-instructions` (optional):  
   - Defaults to `prompt_instructions.txt` in the current working directory.  
   - If the default file is **not** found, no error occurs and no instructions are added.  
-  - If you explicitly provide a **different** file and it doesn’t exist, the script raises an error.
+  - If you explicitly provide a **different** file and it doesn't exist, the script raises an error.
 
 A `--help` menu is also available:
 
@@ -87,7 +96,7 @@ python3 -m unittest discover tests
 
 ## Contributing
 
-Pull requests are welcome! If you add new functionality or modify existing behavior, please include tests. Don’t hesitate to use an LLM to assist in creating or improving tests.
+Pull requests are welcome! If you add new functionality or modify existing behavior, please include tests. Don't hesitate to use an LLM to assist in creating or improving tests.
 
 ## License
 
@@ -121,7 +130,7 @@ Below is an example of how you can install this tool in a dedicated Python virtu
    source ~/.bashrc
    ```
 
-3. **Add the virtual environment’s `bin/` directory to your PATH** (so that you can use the tool from any new shell without re-activating):
+3. **Add the virtual environment's `bin/` directory to your PATH** (so that you can use the tool from any new shell without re-activating):
    ```
    echo 'export PATH="$HOME/venv/bin:$PATH"' >> ~/.zshrc
    ```
@@ -152,7 +161,7 @@ from any directory.
 2. **(Optional) Make activation permanent**:  
    You can add the `activate` command to your PowerShell profile, or simply run the activation script whenever you open a new shell.
 
-3. **Add the virtual environment’s Scripts directory to PATH** if you want to run commands without manual activation. For instance:
+3. **Add the virtual environment's Scripts directory to PATH** if you want to run commands without manual activation. For instance:
    ```
    $env:Path = "C:\path\to\venv\Scripts;" + $env:Path
    ```

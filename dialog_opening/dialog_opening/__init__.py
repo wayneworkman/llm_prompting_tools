@@ -4,6 +4,7 @@
 import os
 import argparse
 import sys
+from importlib.metadata import version
 from lib.prompt_generation import generate_prompt
 
 def main():
@@ -27,12 +28,20 @@ def main():
         help=(
             "Path to a file containing additional prompt instructions. "
             "Defaults to 'prompt_instructions.txt' in the current directory. "
-            "If it’s the default and not found, the file is simply not included. "
-            "If you specify a different file and it’s not found, the script exits with an error."
+            "If it's the default and not found, the file is simply not included. "
+            "If you specify a different file and it's not found, the script exits with an error."
         )
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"dialog_opening {version('dialog_opening')}",
+        help="Show program's version number and exit."
     )
 
     args = parser.parse_args()
+
+    # If we got here, --version wasn't used, so proceed with normal operation
 
     # Ensure input directory exists
     if not os.path.isdir(args.input_dir):
