@@ -77,33 +77,53 @@ class TestCodeVisitor(ClassStackVisitor):
     def __init__(self, test_name: str, file_lines: List[str]):
         super().__init__(file_lines)
         self.test_name = test_name
+
         self.class_name: Optional[str] = None
         self.setup_code: Optional[str] = None
         self.teardown_code: Optional[str] = None
         self.test_code: Optional[str] = None
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if not self.class_stack:
-            self.generic_visit(node)
-            return
+        # Track the "class of interest" where the test is found
+        self._class_of_interest: Optional[str] = None
 
-        start = node.lineno - 1
-        end = node.end_lineno or node.lineno
-        code_lines = ''.join(self.file_lines[start:end]).rstrip('\n')
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """
+        We'll parse the entire class. If it has the target test, we keep setUp/tearDown.
+        Otherwise, we discard them.
+        """
+        self.class_stack.append(node.name)
 
-        if node.name == self.test_name:
-            self.class_name = self.class_stack[-1]
-            self.test_code = code_lines
-        elif node.name == 'setUp':
-            if not self.class_name:
-                self.class_name = self.class_stack[-1]
-            self.setup_code = code_lines
-        elif node.name == 'tearDown':
-            if not self.class_name:
-                self.class_name = self.class_stack[-1]
-            self.teardown_code = code_lines
+        # Temporarily store setUp/tearDown/test code for THIS class
+        backup_setup = None
+        backup_teardown = None
+        backup_test = None
 
+        # We'll do a sub-visitor that collects these methods in the current class
+        for child in node.body:
+            if isinstance(child, ast.FunctionDef):
+                start = child.lineno - 1
+                end = child.end_lineno or child.lineno
+                code_lines = ''.join(self.file_lines[start:end]).rstrip('\n')
+
+                if child.name == self.test_name:
+                    self._class_of_interest = node.name
+                    self.class_name = node.name
+                    backup_test = code_lines
+                elif child.name == 'setUp':
+                    backup_setup = code_lines
+                elif child.name == 'tearDown':
+                    backup_teardown = code_lines
+
+        # Now if we found the test method in this class, store setUp/tearDown
+        # (It's valid to store them even if they appear before the test in the code.)
+        if self._class_of_interest == node.name:
+            self.test_code = backup_test
+            self.setup_code = backup_setup
+            self.teardown_code = backup_teardown
+
+        # Also gather imports by visiting child nodes
         self.generic_visit(node)
+        self.class_stack.pop()
 
 
 class CodeExtractor:

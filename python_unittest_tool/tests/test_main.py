@@ -158,8 +158,6 @@ class TestMain(unittest.TestCase):
                                     mock_code_ext, mock_parser, mock_runner):
         """Test handling of PromptGenerator errors."""
         mock_runner_instance = mock_runner.return_value
-
-        # Now include a line that matches the file/line pattern:
         mock_runner_instance.run_tests.return_value = TestRunResult(
             stdout=(
                 "FAIL: test_something (test_module.TestClass)\n"
@@ -184,7 +182,19 @@ class TestMain(unittest.TestCase):
             )
         ]
 
-        # Make prompt generation fail
+        # IMPORTANT: Ensure CodeExtractor returns a valid CodeSegment
+        mock_code_ext_instance = mock_code_ext.return_value
+        mock_code_ext_instance.extract_test_code.return_value = CodeSegment(
+            file_path="/test/path",
+            class_name="TestClass",
+            setup_code=None,
+            teardown_code=None,
+            test_code="def test_something(): pass",
+            source_code=None,
+            imports=[]
+        )
+
+        # Make prompt generation fail with an Exception
         mock_prompt_gen.return_value.generate_prompt.side_effect = Exception("Failed to write prompt")
 
         with patch('sys.argv', ['script.py']):
@@ -193,6 +203,8 @@ class TestMain(unittest.TestCase):
         # Confirm we returned 1, and that generate_prompt was indeed called once
         self.assertEqual(exit_code, 1)
         mock_prompt_gen.return_value.generate_prompt.assert_called_once()
+
+
 
 
     def test_invalid_arguments(self):

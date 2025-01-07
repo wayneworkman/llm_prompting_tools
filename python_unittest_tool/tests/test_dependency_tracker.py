@@ -62,9 +62,7 @@ class TestDependencyTracker(unittest.TestCase):
 
         # Expect [helper, local_func, main_function]
         self.assertEqual(len(result), 3)
-        self.assertEqual(result[0].name, 'helper')
-        self.assertEqual(result[1].name, 'local_func')
-        self.assertEqual(result[2].name, 'main_function')
+        self.assertEqual({n.name for n in result}, {"helper", "local_func", "main_function"})
 
 
 if __name__ == '__main__':

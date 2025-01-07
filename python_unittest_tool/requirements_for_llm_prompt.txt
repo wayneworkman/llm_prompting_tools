@@ -111,21 +111,25 @@ The tool must extract relevant portions of code from two types of files: **test 
 - **Structure** (in order):
   1. **Instructions Section** (if `prompt_instructions.txt` exists, see [Prompt Instructions File](#prompt-instructions-file))
   2. **Test Output Section**  
+
+     TEST OUTPUT
      ```
-     === TEST OUTPUT ===
      [the captured failure output for each included test]
      ```
   3. **File-by-file code sections**, labeled with the file path. For example:  
      ```
-     === tests/test_example.py ===
+     tests/test_example.py
+     ```
      [imports]
      [class setup/teardown if relevant]
      [complete failing test function(s)]
+     ```
 
-     === src/module.py ===
+     src/module.py
+    ```
      [imports]
      [relevant functions/classes]
-     ```
+    ```
 - Each file’s content is grouped under a heading that includes the *full path*, for clarity.
 
 ---
@@ -159,7 +163,7 @@ The tool must extract relevant portions of code from two types of files: **test 
 ### 2.6 Prompt Instructions File
 - If a file named `prompt_instructions.txt` exists in the project root:
   1. Read its entire contents.
-  2. Prepend them to `prompt.txt` under a header labeled `=== INSTRUCTIONS ===`.
+  2. Prepend them to `prompt.txt` under a header labeled `INSTRUCTIONS`.
 - If `prompt_instructions.txt` does not exist, *no error* is raised, and no instructions section is included.  
 - Any file reading errors should be logged, but not crash the program (fail gracefully).  
 
