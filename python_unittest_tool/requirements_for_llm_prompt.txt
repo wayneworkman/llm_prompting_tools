@@ -1,0 +1,249 @@
+# requirements_for_llm_prompt.md
+
+# Introduction
+
+This document describes in detail a Python-based tool for analyzing failed/unittest-based tests, extracting the minimal relevant code across a Python project, and packaging all necessary context into a `prompt.txt` file for Large Language Model (LLM) assistance. The primary goals are:
+
+- **Efficiency**: limiting token usage by including *only* the relevant tests, imports, functions, and dependencies.
+- **Completeness**: preserving all code snippets, formatting, and test failure messages that an LLM needs to diagnose the failures.
+- **Modularity**: the tool itself must be broken into small, easily testable Python modules.
+
+This tool will:
+1. Run `python -m unittest discover tests` (or a custom directory if desired).
+2. Capture & parse the output to identify any failed or errored tests.
+3. Obey a configurable limit on how many test failures to include (set via `NUMBER_OF_ISSUES_TO_INCLUDE`).
+4. For each failed test, gather:
+   - The original traceback + failure message.
+   - The failing test code (with decorators, setup, teardown).
+   - Dependent functions/classes from source files, following calls across the project.
+   - Only the actually used imports.
+5. Optionally prepend the contents of a file called `prompt_instructions.txt` if that file exists.
+6. Write all of this into `prompt.txt` in an organized format.
+
+---
+
+## Table of Contents
+
+1. [Core Functional Requirements](#core-functional-requirements)  
+   1.1 [Test Execution and Output Capture](#test-execution-and-output-capture)  
+   1.2 [Test Output Processing](#test-output-processing)  
+   1.3 [Code Extraction](#code-extraction)  
+   1.4 [Dependency Analysis](#dependency-analysis)  
+   1.5 [Prompt Generation](#prompt-generation)
+
+2. [Extended Requirements and Scenarios](#extended-requirements-and-scenarios)  
+   2.1 [Imports](#imports)  
+   2.2 [Parameterization and Decorators](#parameterization-and-decorators)  
+   2.3 [Classes vs. Functions](#classes-vs-functions)  
+   2.4 [Handling Circular Dependencies](#handling-circular-dependencies)  
+   2.5 [Handling Setup/Teardown and Fixtures](#handling-setupteardown-and-fixtures)  
+   2.6 [Prompt Instructions File](#prompt-instructions-file)  
+   2.7 [Output Formatting Requirements](#output-formatting-requirements)  
+
+3. [Technical Requirements](#technical-requirements)  
+   3.1 [Project Layout](#project-layout)  
+   3.2 [Error Handling](#error-handling)  
+   3.3 [Performance Considerations](#performance-considerations)  
+   3.4 [Configuration Options](#configuration-options)
+
+4. [Future Considerations](#future-considerations)
+
+---
+
+## 1. Core Functional Requirements
+
+### 1.1 Test Execution and Output Capture
+- The tool must be able to run `python -m unittest discover tests` (or a specified test directory).
+- Standard output (`stdout`) and error output (`stderr`) must be captured.
+- The exit code from the unittest process must be stored (so we know if tests failed or succeeded).
+- If the subprocess call itself fails (e.g., invalid command, missing Python, etc.), the tool should handle this gracefully and surface a clear error.
+
+### 1.2 Test Output Processing
+- **Purpose**: Identify which tests have failed or errored, along with their tracebacks.
+- Parse the complete unittest output to detect:
+  - The test’s name (e.g., `test_something`).
+  - The test’s class name (e.g., `TestMyFeature`).
+  - The file path where the failing test resides (extracted from traceback).
+  - The line number of the failure.
+  - The error message (e.g., `AssertionError: True is not false`).
+  - The full traceback text.
+- Support a numeric limit on how many test failures to process, called `NUMBER_OF_ISSUES_TO_INCLUDE`.
+  - `0` means process *all* failures.
+  - `N > 0` means process *only N* failures, in the order they appear in the unittest output.
+- If a test is reported as `ERROR:` instead of `FAIL:`, handle it the same way.
+- The tool should store a data structure (e.g., a list of `TestFailure` objects) for each discovered failure.
+
+### 1.3 Code Extraction
+The tool must extract relevant portions of code from two types of files: **test files** (where the failing tests live) and **source files** (where the tested logic lives). Minimizing token usage is the core motivation.
+
+#### 1.3.1 Test Code Extraction
+- **Goal**: Extract only the relevant test code from failing tests.
+- Steps:
+  1. Read the file associated with the failing test.
+  2. Find:
+     - All imports used by that test (via AST or some usage analysis).
+     - The test class definition if relevant.
+     - `setUp` / `tearDown` (or any naming convention for test setup/teardown) if the failing test uses them.
+     - The *entire* body of the failing test function, including:
+       - All decorators (e.g., `@patch`, `@pytest.mark.parametrize`, etc.).
+       - The full function with any parameterized cases or loops unmodified.
+     - Do **not** include other test methods from the same class unless they’re explicitly part of the execution path (some unusual scenario). Usually, we only keep the failing test method.
+  3. Keep the original code formatting, comments, and docstrings intact.
+
+#### 1.3.2 Source Code Extraction
+- **Goal**: Extract only the relevant functions/classes from source files that the failing test (and its tested function) depends on.
+- Steps:
+  1. Identify the function under test (by name) from the traceback or code references.
+  2. Recursively track all functions it calls within the project.
+  3. For classes, include only the methods that are part of the execution path (or property definitions if they are used).
+  4. Maintain original formatting, including docstrings, comments, and spacing.
+  5. Use an import analyzer to confirm which imports are actually needed, ignoring third-party library details or references outside the project scope.
+  6. Handle both absolute and relative imports (and preserve them exactly as-is).
+
+### 1.4 Dependency Analysis
+- The tool must track function calls across multiple files in the project, forming a dependency graph or similar structure.
+- If a function is found to call another function in some other file, that function is also extracted, continuing until all relevant references are discovered or the code steps outside the project boundaries (e.g., calling `requests.get`).
+- The tool must handle a scenario where function `A` calls `B`, `B` calls `C`, and `C` calls `A` again (circular dependency). Each unique function should appear *once* in the output to prevent infinite loops.
+- Third-party library calls are *not* recursed into. For example, if the code calls `pandas.DataFrame`, we do not go inside pandas to gather code.
+
+### 1.5 Prompt Generation
+- **Goal**: Create a `prompt.txt` that the user can feed into an LLM, containing all instructions, test output, and relevant code.
+- **Structure** (in order):
+  1. **Instructions Section** (if `prompt_instructions.txt` exists, see [Prompt Instructions File](#prompt-instructions-file))
+  2. **Test Output Section**  
+     ```
+     === TEST OUTPUT ===
+     [the captured failure output for each included test]
+     ```
+  3. **File-by-file code sections**, labeled with the file path. For example:  
+     ```
+     === tests/test_example.py ===
+     [imports]
+     [class setup/teardown if relevant]
+     [complete failing test function(s)]
+
+     === src/module.py ===
+     [imports]
+     [relevant functions/classes]
+     ```
+- Each file’s content is grouped under a heading that includes the *full path*, for clarity.
+
+---
+
+## 2. Extended Requirements and Scenarios
+
+### 2.1 Imports
+- **Requirement**: We only want the imports that are *actually used* by the extracted code.  
+- The import analysis will examine usage (via AST) and remove unused imports to reduce tokens.  
+- Preserve the original import statements exactly (including relative vs. absolute).  
+
+### 2.2 Parameterization and Decorators
+- If a failing test is parameterized (e.g., `@pytest.mark.parametrize`), include the entire function body with *all* parameters. We do *not* attempt to remove only the failing parameter.  
+- If a failing test or a code function has decorators (e.g., `@patch`, `@cached_property`), these are included verbatim.  
+
+### 2.3 Classes vs. Functions
+- If the failing code is a class method (e.g., `class Foo`, `def bar(self)`), we:
+  - Include the class definition in the output with only the relevant methods.  
+  - If the method calls `another_method()` of the same class, that’s also extracted.  
+  - Unneeded methods from the same class are excluded if they are *not* in the call chain.  
+
+### 2.4 Handling Circular Dependencies
+- The tool must detect any circular references among code. Each function or method should appear only once in the final prompt.  
+- Example: If function `A` calls `B` and `B` calls `A`, once we’ve extracted `A` and `B`, do not repeatedly expand them again.  
+
+### 2.5 Handling Setup/Teardown and Fixtures
+- If a failing test uses `setUp` or `tearDown` (or `setUpClass`, etc.), include those methods in the final code snippet.  
+- If a test is using a parent class that contains `setUp`, the parent class code for setup is also included.  
+- For external fixture usage (e.g., `pytest` fixtures in `conftest.py`), include only the fixture code actually used by the failing test, if that fixture is part of the project.
+
+### 2.6 Prompt Instructions File
+- If a file named `prompt_instructions.txt` exists in the project root:
+  1. Read its entire contents.
+  2. Prepend them to `prompt.txt` under a header labeled `=== INSTRUCTIONS ===`.
+- If `prompt_instructions.txt` does not exist, *no error* is raised, and no instructions section is included.  
+- Any file reading errors should be logged, but not crash the program (fail gracefully).  
+
+### 2.7 Output Formatting Requirements
+- **Preserve Original Code Formatting**  
+  Including whitespace, comments, and docstrings.  
+- **Include Full Traceback for Each Failure**  
+  Do not truncate the traceback lines.  
+- **Organize Code by File**  
+  Mark each file with an `=== [file_path] ===` header.  
+- **Retain Relative Imports**  
+  If the code says `from .utils import do_something`, keep that exactly.  
+- **Deduplicate**  
+  If a function or file snippet is already included, do not repeat it.  
+
+---
+
+## 3. Technical Requirements
+
+### 3.1 Project Layout
+A recommended layout is:
+
+```
+.
+├── main.py
+├── test_runner.py
+├── test_parser.py
+├── code_extractor.py
+├── import_analyzer.py
+├── dependency_tracker.py
+├── prompt_generator.py
+├── tests/
+│   ├── test_test_runner.py
+│   ├── test_test_parser.py
+│   ├── test_code_extractor.py
+│   ├── test_import_analyzer.py
+│   ├── test_dependency_tracker.py
+│   └── test_prompt_generator.py
+└── (possibly other files)
+```
+
+Explanation of each module’s responsibilities:
+
+1. **`test_runner.py`** – runs `unittest discover`, captures results (via `subprocess.run`).
+2. **`test_parser.py`** – parses stdout to identify `FAIL`/`ERROR` lines, extracts file path, test name, traceback, etc.
+3. **`code_extractor.py`** – given a file path + function name, extracts only relevant code from test or source files.
+4. **`import_analyzer.py`** – given Python code, determines which imports are actually used.
+5. **`dependency_tracker.py`** – given an entry function, recursively identifies which additional functions/classes are called across the codebase.
+6. **`prompt_generator.py`** – orchestrates and writes the final `prompt.txt`, with optional instructions from `prompt_instructions.txt`.
+7. **`main.py`** – ties them all together in a user-facing script.
+
+### 3.2 Error Handling
+- Missing files must be handled gracefully (log a warning, skip that test or snippet).
+- Malformed Python in a file should not crash the entire tool. Log the error and move on.
+- Import errors or unknown references (like a function not found anywhere) should be reported or logged but not cause a hard crash.
+- If the unittest subprocess itself fails (cannot run), raise a clear exception or error message: "Failed to execute unittest discover."
+
+### 3.3 Performance Considerations
+- Larger codebases can have many tests and deep dependency chains.  
+- Caching:
+  - **File caching**: if a file has already been read and parsed, store it in memory rather than re-opening repeatedly.
+  - **Dependency caching**: once we’ve resolved dependencies for function `(foo, bar.py)`, do not redo the same logic.  
+- Avoid scanning third-party libraries or site-packages. The tool looks only within the project’s root directory.  
+
+### 3.4 Configuration Options
+- **`NUMBER_OF_ISSUES_TO_INCLUDE`**  
+  - `0` → unlimited, include all test failures.  
+  - `N > 0` → only include the first N discovered failures.  
+  - Default can be `1` or user-specified.  
+- **Optional**: `TEST_DIR` to override the default `tests` folder.  
+- **Optional**: `PROMPT_INSTRUCTIONS_FILE` to override the default `prompt_instructions.txt` name.
+
+---
+
+## 4. Future Considerations
+- **Support for Additional Test Frameworks**  
+  e.g., `pytest` or custom frameworks.  
+- **More Complex Import/Dependency Patterns**  
+  e.g., wildcard imports (`from module import *`), dynamic imports, etc.  
+- **Enhanced Logging or GUI**  
+  Possibly present a summary of extracted files.  
+- **Custom Output Format**  
+  Instead of `prompt.txt`, one might want JSON or a structured file for better automation.  
+- **Handling Non-Python or Mixed-Language Projects**  
+  Currently out of scope, but might be needed if the project has C/C++ or other bindings.  
+
+---
