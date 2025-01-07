@@ -1,4 +1,5 @@
 # python_unittest_tool/main.py
+# (This file goes in the python_unittest_tool/ directory.)
 
 """
 Main entry point for the test analysis tool.
@@ -75,7 +76,6 @@ def parse_args() -> Config:
     
     args = parser.parse_args()
     
-    # Validate negative number_of_issues -> raise SystemExit
     if args.number_of_issues < 0:
         parser.error("number_of_issues cannot be negative")
     
@@ -98,17 +98,14 @@ def run_analysis(config: Config) -> int:
         Exit code (0 for success, non-zero for failure)
     """
     try:
-        # Initialize components
         test_runner = TestRunner(config.test_dir)
         test_parser = TestOutputParser(config.number_of_issues)
         code_extractor = CodeExtractor()
         dependency_tracker = DependencyTracker(config.project_root)
         prompt_generator = PromptGenerator(config.project_root)
         
-        # NEW: Create an ImportAnalyzer instance
         import_analyzer = ImportAnalyzer()
 
-        # Run tests and get output
         logger.info("Running tests...")
         test_result = test_runner.run_tests()
         
@@ -116,7 +113,6 @@ def run_analysis(config: Config) -> int:
             logger.info("All tests passed!")
             return 0
         
-        # Parse test failures
         logger.info("Parsing test failures...")
         failures = test_parser.parse_output(test_result.stdout)
         
@@ -124,22 +120,18 @@ def run_analysis(config: Config) -> int:
             logger.warning("No test failures found in output.")
             return 0
         
-        # Process each failure
         failure_infos: List[FailureInfo] = []
         for failure in failures:
             logger.info(f"Processing failure: {failure.test_name}")
             
-            # Extract test code
             test_code = code_extractor.extract_test_code(
                 failure.file_path,
                 failure.test_name
             )
             
-            # NEW: Filter out unused imports in the failing test code
             used_imports_test = import_analyzer.analyze_code(test_code.test_code or "")
             test_code.imports = used_imports_test
 
-            # Track dependencies
             source_segments = []
             tracked_functions = dependency_tracker.track_dependencies(
                 failure.file_path,
@@ -147,26 +139,24 @@ def run_analysis(config: Config) -> int:
                 failure.test_class
             )
             
-            # Extract and filter source code for each dependency
             for func in tracked_functions:
                 source_code = code_extractor.extract_source_code(
                     func.file_path,
                     func.name,
                 )
                 if source_code:
-                    # NEW: Filter out unused imports in the source function code
                     used_imports_src = import_analyzer.analyze_code(source_code.source_code or "")
                     source_code.imports = used_imports_src
                     source_segments.append(source_code)
-            
-            # Create failure info
-            failure_infos.append(FailureInfo(
-                test_output=failure.full_output,
-                test_code=test_code,
-                source_segments=source_segments
-            ))
+
+            failure_infos.append(
+                FailureInfo(
+                    test_output=failure.full_output,
+                    test_code=test_code,
+                    source_segments=source_segments
+                )
+            )
         
-        # Generate prompt
         logger.info(f"Generating prompt file: {config.output_file}")
         prompt_generator.generate_prompt(failure_infos, config.output_file)
         
@@ -177,7 +167,9 @@ def run_analysis(config: Config) -> int:
         logger.error(f"Analysis failed: {str(e)}", exc_info=True)
         return 1
 
-
+# -------------
+# main function
+# -------------
 def main() -> int:
     """
     Main entry point.
@@ -186,11 +178,15 @@ def main() -> int:
         Exit code (0 for success, non-zero for failure)
     """
     try:
-        config = parse_args()
-        return run_analysis(config)
+        return _execute_main()
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return 1
+
+# Helper subfunction for main()
+def _execute_main() -> int:
+    config = parse_args()
+    return run_analysis(config)
 
 
 if __name__ == '__main__':

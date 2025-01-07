@@ -148,6 +148,7 @@ class TestMain(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         mock_runner_instance.run_tests.assert_called_once()
 
+
     @patch('python_unittest_tool.main.TestRunner')
     @patch('python_unittest_tool.main.TestOutputParser')
     @patch('python_unittest_tool.main.CodeExtractor')
@@ -156,14 +157,18 @@ class TestMain(unittest.TestCase):
     def test_prompt_generator_error(self, mock_prompt_gen, mock_dep_track, 
                                     mock_code_ext, mock_parser, mock_runner):
         """Test handling of PromptGenerator errors."""
-        # Setup mocks
         mock_runner_instance = mock_runner.return_value
 
-        # CHANGED: Provide a real "FAIL: test_something (test_module.TestClass)" so the parser sees a valid fail
+        # Now include a line that matches the file/line pattern:
         mock_runner_instance.run_tests.return_value = TestRunResult(
-            stdout="FAIL: test_something (test_module.TestClass)\nTraceback...\n",
+            stdout=(
+                "FAIL: test_something (test_module.TestClass)\n"
+                "Traceback...\n"
+                'File "/test/path", line 10\n'
+                "AssertionError: some error\n"
+            ),
             stderr="",
-            returncode=1
+            return_code=1
         )
 
         mock_parser_instance = mock_parser.return_value
@@ -182,14 +187,13 @@ class TestMain(unittest.TestCase):
         # Make prompt generation fail
         mock_prompt_gen.return_value.generate_prompt.side_effect = Exception("Failed to write prompt")
 
-        # Run analysis
         with patch('sys.argv', ['script.py']):
             exit_code = main.main()
 
-        # Verify
+        # Confirm we returned 1, and that generate_prompt was indeed called once
         self.assertEqual(exit_code, 1)
-        # This line should pass now, because generate_prompt is called once before raising the exception
         mock_prompt_gen.return_value.generate_prompt.assert_called_once()
+
 
     def test_invalid_arguments(self):
         """Test handling of invalid command line arguments."""

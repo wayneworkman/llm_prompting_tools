@@ -142,14 +142,18 @@ class TestPromptGenerator(unittest.TestCase):
         second_test_index = written_content.find("=== TEST OUTPUT ===", first_test_index + 1)
         self.assertGreater(second_test_index, first_test_index)
     
+
     @patch('pathlib.Path.write_text')
     @patch('pathlib.Path.exists')
     def test_import_formatting(self, mock_exists, mock_write_text):
-        """Test formatting of import statements."""
+        """
+        Test formatting of import statements with usage-based filtering.
+        This test now expects only the actually used imports to remain.
+        """
         # Setup mock
         mock_exists.return_value = False
         
-        # Add more imports in random order
+        # We'll stuff multiple imports in random order, as before:
         self.test_segment.imports = [
             "import sys",
             "from module import process_data",
@@ -157,16 +161,34 @@ class TestPromptGenerator(unittest.TestCase):
             "from typing import List"
         ]
         
+        # IMPORTANT: The snippet references only 'process_data'.
+        # So usage-based filtering will drop the others.
+        self.test_segment.test_code = dedent('''
+            def test_function(self):
+                result = process_data("test")
+                self.assertEqual(result, "TEST")
+        ''').strip()
+        
+        # Replace the test_code inside our FailureInfo with this snippet
+        self.failure_info.test_code = self.test_segment
+        
         # Generate prompt
         self.generator.generate_prompt([self.failure_info])
         
         # Get the written content
         written_content = mock_write_text.call_args[0][0]
         
-        # Verify imports are sorted
-        import_section = written_content.split("===")[2]  # Get the test file section
-        import_lines = [line for line in import_section.split("\n") if line.startswith(("import", "from"))]
-        self.assertEqual(import_lines, self.test_segment.imports)
+        # We'll examine the test_module.py section (split by '===').
+        import_section = written_content.split("===")[2]  # This chunk holds the import lines for test_module.py
+        import_lines = [
+            line for line in import_section.split("\n")
+            if line.startswith(("import", "from"))
+        ]
+        
+        # Because only process_data() was actually used, we expect only that import to remain.
+        self.assertEqual(import_lines, ["from module import process_data"])
+
+
     
     @patch('pathlib.Path.write_text')
     @patch('pathlib.Path.exists')

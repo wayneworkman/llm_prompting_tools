@@ -1,4 +1,4 @@
-# File: tests/test_dependency_tracker.py
+# tests/test_dependency_tracker.py
 
 import unittest
 from textwrap import dedent
@@ -13,7 +13,7 @@ class TestDependencyTracker(unittest.TestCase):
     """Test cases for DependencyTracker class."""
 
     def setUp(self):
-        # CHANGED: Removed extra internal calls so we only have 3 dependencies total.
+        # These three .py files are the minimal stubs needed.
         self.test_files = {
             '/project/main.py': dedent('''
                 from utils import helper

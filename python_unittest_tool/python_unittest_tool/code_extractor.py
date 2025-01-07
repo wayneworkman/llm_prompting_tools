@@ -1,4 +1,5 @@
 # python_unittest_tool/code_extractor.py
+# (This file goes in the python_unittest_tool/ directory.)
 
 import ast
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ class CodeSegment:
     test_code: Optional[str]
     source_code: Optional[str]
     imports: List[str]
+
 
 class ClassStackVisitor(ast.NodeVisitor):
     """
@@ -50,6 +52,7 @@ class ClassStackVisitor(ast.NodeVisitor):
         self.imports.append(snippet)
         self.generic_visit(node)
 
+
 class SourceCodeVisitor(ClassStackVisitor):
     def __init__(self, function_name: str, file_lines: List[str]):
         super().__init__(file_lines)
@@ -69,6 +72,7 @@ class SourceCodeVisitor(ClassStackVisitor):
                 self.class_name = self.class_stack[-1]
         self.generic_visit(node)
 
+
 class TestCodeVisitor(ClassStackVisitor):
     def __init__(self, test_name: str, file_lines: List[str]):
         super().__init__(file_lines)
@@ -82,7 +86,7 @@ class TestCodeVisitor(ClassStackVisitor):
         if not self.class_stack:
             self.generic_visit(node)
             return
-        # Extract lines
+
         start = node.lineno - 1
         end = node.end_lineno or node.lineno
         code_lines = ''.join(self.file_lines[start:end]).rstrip('\n')
@@ -101,48 +105,43 @@ class TestCodeVisitor(ClassStackVisitor):
 
         self.generic_visit(node)
 
+
 class CodeExtractor:
     def __init__(self):
         pass
 
-    def extract_test_code(self, file_path: str, test_name: str) -> CodeSegment:
-        try:
-            file_lines = Path(file_path).read_text(encoding='utf-8').splitlines(keepends=True)
-        except Exception:
-            return CodeSegment(file_path, None, None, None, None, None, [])
-
-        visitor = TestCodeVisitor(test_name, file_lines)
-        source = ''.join(file_lines)
-        try:
-            tree = ast.parse(source)
-            visitor.visit(tree)
-        except Exception:
-            return CodeSegment(file_path, None, None, None, None, None, [])
-
-        return CodeSegment(
-            file_path=file_path,
-            class_name=visitor.class_name,
-            setup_code=visitor.setup_code,
-            teardown_code=visitor.teardown_code,
-            test_code=visitor.test_code,
-            source_code=None,
-            imports=visitor.imports
-        )
-
+    # ------------------
+    # extract_source_code
+    # ------------------
     def extract_source_code(self, file_path: str, function_name: str) -> CodeSegment:
-        try:
-            file_lines = Path(file_path).read_text(encoding='utf-8').splitlines(keepends=True)
-        except Exception:
+        file_lines = self._safe_read_file_lines(file_path)
+        if not file_lines:
             return CodeSegment(file_path, None, None, None, None, None, [])
 
         visitor = SourceCodeVisitor(function_name, file_lines)
         source = ''.join(file_lines)
+
+        if not self._parse_source_ast(source, visitor):
+            return CodeSegment(file_path, None, None, None, None, None, [])
+
+        return self._build_source_code_segment(file_path, visitor)
+
+    # Helper methods for extract_source_code
+    def _safe_read_file_lines(self, file_path: str) -> List[str]:
+        try:
+            return Path(file_path).read_text(encoding='utf-8').splitlines(keepends=True)
+        except Exception:
+            return []
+
+    def _parse_source_ast(self, source: str, visitor: ast.NodeVisitor) -> bool:
         try:
             tree = ast.parse(source)
             visitor.visit(tree)
+            return True
         except Exception:
-            return CodeSegment(file_path, None, None, None, None, None, [])
+            return False
 
+    def _build_source_code_segment(self, file_path: str, visitor: SourceCodeVisitor) -> CodeSegment:
         return CodeSegment(
             file_path=file_path,
             class_name=visitor.class_name,
@@ -150,5 +149,33 @@ class CodeExtractor:
             teardown_code=None,
             test_code=None,
             source_code=visitor.source_code,
+            imports=visitor.imports
+        )
+
+    # ----------------
+    # extract_test_code
+    # ----------------
+    def extract_test_code(self, file_path: str, test_name: str) -> CodeSegment:
+        file_lines = self._safe_read_file_lines(file_path)
+        if not file_lines:
+            return CodeSegment(file_path, None, None, None, None, None, [])
+
+        visitor = TestCodeVisitor(test_name, file_lines)
+        source = ''.join(file_lines)
+
+        if not self._parse_source_ast(source, visitor):
+            return CodeSegment(file_path, None, None, None, None, None, [])
+
+        return self._build_test_code_segment(file_path, visitor)
+
+    # Helper method for extract_test_code
+    def _build_test_code_segment(self, file_path: str, visitor: TestCodeVisitor) -> CodeSegment:
+        return CodeSegment(
+            file_path=file_path,
+            class_name=visitor.class_name,
+            setup_code=visitor.setup_code,
+            teardown_code=visitor.teardown_code,
+            test_code=visitor.test_code,
+            source_code=None,
             imports=visitor.imports
         )

@@ -1,4 +1,5 @@
 # python_unittest_tool/prompt_generator.py
+# (This file goes in the python_unittest_tool/ directory.)
 
 """
 Module for generating the final prompt.txt file.
@@ -11,7 +12,6 @@ from typing import List, Optional
 from python_unittest_tool.code_extractor import CodeSegment
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class FailureInfo:
@@ -29,58 +29,84 @@ class PromptGenerator:
     
     def generate_prompt(self, failures: List[FailureInfo], output_file: str = "prompt.txt") -> None:
         content = []
-        
+
         instructions = self._read_instructions()
+        self._maybe_add_instructions(content, instructions)
+
+        for i, failure in enumerate(failures, 1):
+            self._add_failure_section(content, failure)
+            if i < len(failures):
+                content.extend(["=" * 70, ""])
+
+        self._write_output(content, output_file)
+
+    def _maybe_add_instructions(self, content: List[str], instructions: Optional[str]) -> None:
         if instructions:
             content.extend([
                 "=== INSTRUCTIONS ===",
                 instructions,
-                ""  # Keep a blank line so indexing in tests remains consistent
+                ""  # Keep a blank line
             ])
-        
-        # Process each failure
-        for i, failure in enumerate(failures, 1):
+
+    def _add_failure_section(self, content: List[str], failure: FailureInfo) -> None:
+        content.extend([
+            "=== TEST OUTPUT ===",
+            failure.test_output,
+            ""
+        ])
+
+        self._add_test_segment(content, failure.test_code)
+
+        self._add_source_segments(content, failure.source_segments)
+
+    #
+    # ******* UPDATED METHOD *******
+    #
+    def _add_test_segment(self, content: List[str], test_segment: CodeSegment) -> None:
+        """
+        Add the failing test code (imports, setup, teardown, test function).
+        Also apply usage-based filtering to test imports, so that only the
+        actually used imports remain. This change is specifically to satisfy
+        test_import_formatting from test_prompt_generator.py.
+        """
+        # Perform usage-based import filtering if we have test code
+        if test_segment.test_code and test_segment.imports:
+            from python_unittest_tool.import_analyzer import ImportAnalyzer
+            analyzer = ImportAnalyzer()
+            used_imports = analyzer.analyze_code(test_segment.test_code)
+            # Overwrite original imports with only the used ones
+            test_segment.imports = used_imports
+
+        # Now proceed to output
+        content.extend([
+            f"=== {test_segment.file_path} ===",
+            self._format_imports(test_segment.imports),
+            ""
+        ])
+
+        if test_segment.class_name:
+            if test_segment.setup_code:
+                content.append(test_segment.setup_code)
+                content.append("")
+            if test_segment.teardown_code:
+                content.append(test_segment.teardown_code)
+                content.append("")
+
+        if test_segment.test_code:
+            content.append(test_segment.test_code)
+            content.append("")
+
+    def _add_source_segments(self, content: List[str], source_segments: List[CodeSegment]) -> None:
+        for segment in source_segments:
             content.extend([
-                "=== TEST OUTPUT ===",
-                failure.test_output,
-                ""  # Again, a blank line after test output to keep sections aligned
-            ])
-            
-            test_segment = failure.test_code
-            content.extend([
-                f"=== {test_segment.file_path} ===",
-                self._format_imports(test_segment.imports),
+                f"=== {segment.file_path} ===",
+                self._format_imports(segment.imports),
                 ""
             ])
-            
-            if test_segment.class_name:
-                if test_segment.setup_code:
-                    content.append(test_segment.setup_code)
-                    content.append("")
-                if test_segment.teardown_code:
-                    content.append(test_segment.teardown_code)
-                    content.append("")
-            
-            if test_segment.test_code:
-                content.append(test_segment.test_code)
+            if segment.source_code:
+                content.append(segment.source_code)
                 content.append("")
-            
-            # Add source code segments
-            for segment in failure.source_segments:
-                content.extend([
-                    f"=== {segment.file_path} ===",
-                    self._format_imports(segment.imports),
-                    ""
-                ])
-                if segment.source_code:
-                    content.append(segment.source_code)
-                    content.append("")
-            
-            if i < len(failures):
-                content.extend(["=" * 70, ""])
-        
-        self._write_output(content, output_file)
-    
+
     def _read_instructions(self) -> Optional[str]:
         instructions_file = self.project_root / "prompt_instructions.txt"
         try:
@@ -90,13 +116,10 @@ class PromptGenerator:
         except Exception as e:
             logger.warning(f"Failed to read prompt_instructions.txt: {e}")
             return None
-    
+
     def _format_imports(self, imports: List[str]) -> str:
         if not imports:
             return ""
-        
-        # Strip leading/trailing spaces from each import line only;
-        # do NOT sort them, to preserve the order from the extraction phase.
         cleaned = [imp.strip() for imp in imports]
         return "\n".join(cleaned)
     

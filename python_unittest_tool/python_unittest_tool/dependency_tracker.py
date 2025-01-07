@@ -1,4 +1,5 @@
-# /home/wayne/git/llm_prompting_tools/python_unittest_tool/dependency_tracker.py
+# python_unittest_tool/dependency_tracker.py
+# (This file goes in the python_unittest_tool/ directory.)
 
 """
 Module for tracking function dependencies across Python files.
@@ -45,21 +46,17 @@ class DependencyTracker:
         
         self.file_cache: Dict[str, str] = {}
         self.import_map: Dict[str, Dict[str, Tuple[str, Optional[str]]]] = defaultdict(dict)
-    
+
+    # ------------------
+    # track_dependencies
+    # ------------------
     def track_dependencies(self, start_file: str, start_function: str, start_class: Optional[str] = None) -> List[FunctionNode]:
-        """
-        Track dependencies starting from a specific function in a given file.
-        """
-        # Convert to absolute path
-        start_file = str(Path(start_file).resolve())
+        start_file_abs = self._resolve_start_file(start_file)
+        visited, result = self._initialize_tracking()
         
-        visited = set()
-        result = []
-        
-        self._build_import_map(start_file)
-        
-        self._track_function_deps(
-            file_path=start_file,
+        self._build_import_map(start_file_abs)
+        self._perform_dependency_tracking(
+            file_path=start_file_abs,
             function_name=start_function,
             class_name=start_class,
             visited=visited,
@@ -67,7 +64,27 @@ class DependencyTracker:
         )
         
         return result
-    
+
+    # Helper methods for track_dependencies
+    def _resolve_start_file(self, start_file: str) -> str:
+        return str(Path(start_file).resolve())
+
+    def _initialize_tracking(self) -> Tuple[Set[Tuple[str, str, Optional[str]]], List[FunctionNode]]:
+        visited = set()
+        result: List[FunctionNode] = []
+        return visited, result
+
+    def _perform_dependency_tracking(
+        self,
+        file_path: str,
+        function_name: str,
+        class_name: Optional[str],
+        visited: Set[Tuple[str, str, Optional[str]]],
+        result: List[FunctionNode]
+    ) -> None:
+        self._track_function_deps(file_path, function_name, class_name, visited, result)
+
+    # Existing private methods
     def _track_function_deps(
         self,
         file_path: str,
@@ -78,8 +95,7 @@ class DependencyTracker:
     ) -> None:
         """
         Analyzes the specified (file_path, function_name, class_name) to find its dependencies,
-        recurses on each one, then appends the corresponding FunctionNode at the end. This
-        ensures 'helper' and 'local_func' appear before 'main_function' in the 'result'.
+        recurses on each one, then appends the corresponding FunctionNode at the end.
         """
         key = (file_path, function_name, class_name)
         if key in visited:
@@ -140,13 +156,12 @@ class DependencyTracker:
             dependencies=visitor.dependencies
         )
         result.append(node)
-    
+
     def _build_import_map(self, file_path: str) -> None:
         """Parse 'file_path', build an import->(real_file, real_class) map."""
         if file_path in self.import_map:
             return  # Already built
         
-        # Ensure file content
         if file_path not in self.file_cache:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -165,14 +180,13 @@ class DependencyTracker:
         builder = ImportMapBuilder(self.indexer, file_path)
         builder.visit(tree)
         self.import_map[file_path].update(builder.import_map)
-    
+
     def _resolve_dependency(
         self,
         current_file: str,
         function_name: str,
         class_name: Optional[str]
     ) -> Tuple[Optional[str], str, Optional[str]]:
-        # If 'function_name' is in the import_map of current_file, we get the real file
         if current_file in self.import_map and function_name in self.import_map[current_file]:
             real_file, real_class = self.import_map[current_file][function_name]
             return real_file, function_name, real_class
@@ -197,47 +211,39 @@ class FunctionAnalyzer(ast.NodeVisitor):
         self.end_line = 0
         
         self.var_class_map: Dict[str, str] = {}
-    
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         prev_class = self.current_class
         self.current_class = node.name
         self.generic_visit(node)
         self.current_class = prev_class
-    
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if node.name == self.target_function and self.current_class == self.target_class:
             self.found_function = True
             self.start_line = node.lineno
             self.end_line = node.end_lineno or node.lineno
-            
-            # Extract code
-            import ast
             self.source_code = ast.get_source_segment(self.full_source, node, padded=True)
-            
             self.generic_visit(node)
         else:
             self.generic_visit(node)
-    
+
     def visit_Assign(self, node: ast.Assign) -> None:
-        # If we do "var = helper()" => var_class_map[var] = "helper"
         if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             var_name = node.targets[0].id
             if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
                 self.var_class_map[var_name] = node.value.func.id
         self.generic_visit(node)
-    
+
     def visit_Call(self, node: ast.Call) -> None:
         if self.found_function:
             if isinstance(node.func, ast.Name):
-                # e.g. "helper()" => (helper, None)
                 self.dependencies.add((node.func.id, None))
             elif isinstance(node.func, ast.Attribute):
-                # e.g. var_name.method_name()
                 if isinstance(node.func.value, ast.Name):
                     var_name = node.func.value.id
                     method_name = node.func.attr
                     if var_name in self.var_class_map:
-                        # e.g. self.var_class_map["h"] = "Helper"
                         self.dependencies.add((method_name, self.var_class_map[var_name]))
                     else:
                         self.dependencies.add((method_name, var_name))
@@ -255,29 +261,36 @@ class ImportMapBuilder(ast.NodeVisitor):
         self.import_map: Dict[str, Tuple[str, Optional[str]]] = {}
     
     def visit_Import(self, node: ast.Import) -> None:
-        """
-        e.g. import utils => 'utils' -> /project/utils.py
-        e.g. import utils as ut => 'ut' -> /project/utils.py
-        """
         for name in node.names:
             imported_as = name.asname or name.name
-            # If name.name == 'utils', we do indexer.resolve_module(...)
             possible_path = self.indexer.resolve_module(str(self.current_file), name.name, level=0)
             if possible_path:
                 self.import_map[imported_as] = (possible_path, None)
         self.generic_visit(node)
     
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """
-        e.g. from utils import helper => 'helper' -> /project/utils.py
-        e.g. from .local_module import local_func => 'local_func'-> /project/local_module.py
-        """
         module_str = node.module or ''
-        # level means how many dots => node.level
-        # We ask the indexer
+        import_statement = self._get_import_statement(node)
         possible_path = self.indexer.resolve_module(str(self.current_file), module_str, node.level)
         if possible_path:
             for alias in node.names:
                 imported_as = alias.asname or alias.name
                 self.import_map[imported_as] = (possible_path, None)
         self.generic_visit(node)
+    
+    def _get_import_statement(self, node: ast.AST) -> str:
+        if isinstance(node, ast.Import):
+            names = ', '.join(
+                f"{name.name} as {name.asname}" if name.asname else name.name
+                for name in node.names
+            )
+            return f"import {names}"
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ''
+            names = ', '.join(
+                f"{name.name} as {name.asname}" if name.asname else name.name
+                for name in node.names
+            )
+            level = '.' * node.level
+            return f"from {level}{module} import {names}"
+        return ""
