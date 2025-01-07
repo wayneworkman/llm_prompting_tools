@@ -4,8 +4,7 @@
 Tests for prompt_generator module.
 """
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
-from pathlib import Path
+from unittest.mock import patch
 from textwrap import dedent
 
 # Changed these lines to point to python_unittest_tool package:

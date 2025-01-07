@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 # Changed these lines to point to python_unittest_tool package:
-from python_unittest_tool.test_runner import TestRunner, TestRunResult
+from python_unittest_tool.test_runner import TestRunner
 
 
 class TestTestRunner(unittest.TestCase):

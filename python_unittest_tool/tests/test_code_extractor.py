@@ -5,7 +5,6 @@ Tests for code_extractor module.
 """
 import unittest
 from textwrap import dedent
-from pathlib import Path
 from unittest.mock import patch
 
 # Changed this line to point to python_unittest_tool package:

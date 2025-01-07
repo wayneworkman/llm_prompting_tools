@@ -5,7 +5,7 @@
 Tests for project_indexer module.
 """
 
-import os
+
 import unittest
 import tempfile
 import shutil

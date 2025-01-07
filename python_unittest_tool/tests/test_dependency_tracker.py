@@ -3,8 +3,7 @@
 import unittest
 from textwrap import dedent
 from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
-import os
+from unittest.mock import patch, mock_open
 
 from python_unittest_tool.dependency_tracker import DependencyTracker, FunctionNode
 

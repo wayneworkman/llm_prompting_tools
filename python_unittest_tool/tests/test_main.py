@@ -1,16 +1,15 @@
 # tests/test_main.py
 
+
+# tests/test_main.py
+
 """
 Tests for main module.
 """
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 from pathlib import Path
-import argparse
-import sys
-import os
 import tempfile
-from textwrap import dedent
 
 from python_unittest_tool import main
 from python_unittest_tool.test_runner import TestRunResult
@@ -310,6 +309,61 @@ class TestMain(unittest.TestCase):
                 output = stdout.read().strip()
                 expected_output = "python_unittest_tool unknown"
                 self.assertEqual(output, expected_output, "Should show 'unknown' when version not found")
+
+
+
+
+
+class TestMainStderrFailures(unittest.TestCase):
+    """
+    Ensure that if errors are printed only to stderr (e.g., import errors),
+    they are still parsed as failures by the tool.
+    """
+    @patch('python_unittest_tool.main.TestRunner')
+    @patch('python_unittest_tool.main.TestOutputParser')
+    def test_combined_output_parsing(self, mock_parser, mock_runner):
+        # Fake an import error reported only in stderr.
+        # No 'FAIL' or 'ERROR' lines in stdout:
+        mock_runner.return_value.run_tests.return_value = TestRunResult(
+            stdout="",
+            stderr="""
+ERROR: test_broken_module (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_broken_module
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+ModuleNotFoundError: No module named 'test_broken_module'
+""",
+            return_code=1
+        )
+
+        # Suppose the parser, when given the combined output,
+        # finds a single Failure
+        mock_parser_instance = mock_parser.return_value
+        mock_parser_instance.parse_output.return_value = [
+            TestFailure(
+                test_name="test_broken_module",
+                test_class="_FailedTest",
+                file_path="/path/to/test_broken_module.py",
+                line_number=10,
+                failure_message="ModuleNotFoundError: No module named 'test_broken_module'",
+                traceback="ImportError traceback stuff...",
+                full_output="some full block"
+            )
+        ]
+
+        with patch('sys.argv', ['script.py']):
+            exit_code = main.main()
+        
+        self.assertEqual(exit_code, 0, "Should exit 0 after parsing the failure, not treat as a tool error.")
+        # Confirm parse_output was called with combined stdout + stderr
+        combined_call_arg = mock_parser_instance.parse_output.call_args[0][0]
+        self.assertIn("ERROR: test_broken_module (unittest.loader._FailedTest)", combined_call_arg)
+        self.assertIn("ModuleNotFoundError", combined_call_arg)
+
+        # Confirm we recognized the single failure
+        mock_parser_instance.parse_output.assert_called_once()
 
 
 if __name__ == '__main__':

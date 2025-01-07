@@ -6,7 +6,7 @@ Tests for test_parser module.
 import unittest
 
 # Changed this line to point to python_unittest_tool package:
-from python_unittest_tool.test_parser import TestOutputParser, TestFailure
+from python_unittest_tool.test_parser import TestOutputParser
 
 
 class TestTestOutputParser(unittest.TestCase):

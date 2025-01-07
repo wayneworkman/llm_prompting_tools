@@ -129,7 +129,8 @@ def run_analysis(config: Config) -> int:
 
         # Otherwise, we do have failing tests => parse them
         logger.info("Parsing test failures...")
-        failures = test_parser.parse_output(test_result.stdout)
+        combined_output = test_result.stdout + "\n" + test_result.stderr
+        failures = test_parser.parse_output(combined_output)
         if not failures:
             # If the parser found no failures, we still exit 0 because we won't treat that as fatal
             logger.warning("No test failures found in output, but return_code != 0 from runner.")
