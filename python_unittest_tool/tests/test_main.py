@@ -230,10 +230,34 @@ class TestMain(unittest.TestCase):
                                 '--number-of-issues', '0',
                                 '--output-file', 'prompt.txt']):
             with patch('python_unittest_tool.main.TestRunner') as mock_runner, \
-                patch('python_unittest_tool.main.TestOutputParser') as mock_parser, \
-                patch('python_unittest_tool.main.CodeExtractor'), \
-                patch('python_unittest_tool.main.DependencyTracker'), \
-                patch('python_unittest_tool.main.PromptGenerator') as mock_gen:
+                 patch('python_unittest_tool.main.TestOutputParser') as mock_parser, \
+                 patch('python_unittest_tool.main.CodeExtractor') as mock_code_extractor, \
+                 patch('python_unittest_tool.main.DependencyTracker'), \
+                 patch('python_unittest_tool.main.PromptGenerator') as mock_gen:
+
+                # --- NEW LINES START ---
+                # Provide valid return values for extract_test_code and extract_source_code
+                from python_unittest_tool.code_extractor import CodeSegment
+                mock_code_extractor_instance = mock_code_extractor.return_value
+                mock_code_extractor_instance.extract_test_code.return_value = CodeSegment(
+                    file_path='/test/path_0',
+                    class_name='TestClass',
+                    setup_code=None,
+                    teardown_code=None,
+                    test_code='def test_0(): pass',
+                    source_code=None,
+                    imports=[]
+                )
+                mock_code_extractor_instance.extract_source_code.return_value = CodeSegment(
+                    file_path='/test/path_src_0',
+                    class_name=None,
+                    setup_code=None,
+                    teardown_code=None,
+                    test_code=None,
+                    source_code='def some_helper(): pass',
+                    imports=[]
+                )
+                # --- NEW LINES END ---
 
                 mock_runner_instance = mock_runner.return_value
                 # Fake a return_code=1 => failures
@@ -258,6 +282,7 @@ class TestMain(unittest.TestCase):
                 failures_passed = mock_gen.return_value.generate_prompt.call_args[0][0]
                 self.assertEqual(len(failures_passed), 3,
                                 "We want all 3 failures included because number_of_issues=0 is unlimited.")
+
 
 
 if __name__ == '__main__':

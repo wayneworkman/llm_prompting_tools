@@ -89,10 +89,10 @@ def parse_args() -> Config:
 
 def run_analysis(config: Config) -> int:
     """
-    Run the complete test analysis workflow with logic:
-    - Return 1 if the test runner fails to run (Exception) or prompt generation fails
-    - Return 0 otherwise (including if we have test failures)
-    - If test_result has_failures => parse them, else skip parse_output
+    Final approach:
+      - Return 1 if and only if the test runner truly bombs (exception)
+        or prompt generation fails (exception).
+      - Return 0 otherwise (including if we do have failing tests).
     """
     try:
         test_runner = TestRunner(config.test_dir)
@@ -100,39 +100,37 @@ def run_analysis(config: Config) -> int:
         code_extractor = CodeExtractor()
         dependency_tracker = DependencyTracker(config.project_root)
         prompt_generator = PromptGenerator(config.project_root)
-        
         import_analyzer = ImportAnalyzer()
 
         logger.info("Running tests...")
-        # If test_runner.run_tests() itself raises an exception, we catch below
-        test_result = test_runner.run_tests()
+        test_result = test_runner.run_tests()  
+        # If the test runner raises an Exception, we jump to except => return 1
 
         if not test_result.has_failures:
             logger.info("All tests passed (no failures).")
-            # do NOT parse output => fix "test_successful_run_no_failures"
-            # skip prompt generation as well
+            # The test 'test_successful_run_no_failures' wants parse_output NOT called here
             return 0
-        
-        # If we do have failures => parse them
+
+        # Otherwise, we do have failing tests => parse them
         logger.info("Parsing test failures...")
         failures = test_parser.parse_output(test_result.stdout)
         if not failures:
-            # No test failures discovered in the output
-            logger.warning("No test failures found in output.")
+            # If the parser found no failures, we still exit 0 because we won't treat that as fatal
+            logger.warning("No test failures found in output, but return_code != 0 from runner.")
             return 0
-        
+
         logger.info(f"Discovered {len(failures)} failing/errored test(s).")
-        
+
         failure_infos: List[FailureInfo] = []
         for failure in failures:
             logger.info(f"Processing failure: {failure.test_name}")
-            test_code = code_extractor.extract_test_code(
-                failure.file_path,
-                failure.test_name
-            )
+
+            # Extract test code
+            test_code = code_extractor.extract_test_code(failure.file_path, failure.test_name)
             used_imports_test = import_analyzer.analyze_code(test_code.test_code or "")
             test_code.imports = used_imports_test
 
+            # Track dependencies
             tracked_functions = dependency_tracker.track_dependencies(
                 failure.file_path,
                 failure.test_name,
@@ -140,37 +138,32 @@ def run_analysis(config: Config) -> int:
             )
             source_segments = []
             for func in tracked_functions:
-                source_code = code_extractor.extract_source_code(
-                    func.file_path, func.name
-                )
+                source_code = code_extractor.extract_source_code(func.file_path, func.name)
                 if source_code:
-                    used_imports_src = import_analyzer.analyze_code(
-                        source_code.source_code or ""
-                    )
+                    used_imports_src = import_analyzer.analyze_code(source_code.source_code or "")
                     source_code.imports = used_imports_src
                     source_segments.append(source_code)
 
-            failure_infos.append(
-                FailureInfo(
-                    test_output=failure.full_output,
-                    test_code=test_code,
-                    source_segments=source_segments
-                )
-            )
+            failure_infos.append(FailureInfo(
+                test_output=failure.full_output,
+                test_code=test_code,
+                source_segments=source_segments
+            ))
 
         logger.info(f"Generating prompt file: {config.output_file}")
         try:
             prompt_generator.generate_prompt(failure_infos, config.output_file)
         except Exception as gen_exc:
             logger.error(f"Prompt generation failed: {gen_exc}", exc_info=True)
-            return 1  # fail if prompt generation fails
+            return 1  # If prompt generation bombs, that's a real error
 
-        logger.info("Analysis complete, returning 0.")
+        logger.info("Analysis complete - returning 0 (even with test failures).")
         return 0
 
     except Exception as e:
-        logger.error(f"Analysis failed (test runner error or other): {e}", exc_info=True)
+        logger.error(f"Analysis failed (test runner or other) with Exception: {e}", exc_info=True)
         return 1
+
 
 
 
