@@ -179,38 +179,6 @@ The tool must extract relevant portions of code from two types of files: **test 
 
 ## 3. Technical Requirements
 
-### 3.1 Project Layout
-A recommended layout is:
-
-```
-.
-├── main.py
-├── test_runner.py
-├── test_parser.py
-├── code_extractor.py
-├── import_analyzer.py
-├── dependency_tracker.py
-├── prompt_generator.py
-├── tests/
-│   ├── test_test_runner.py
-│   ├── test_test_parser.py
-│   ├── test_code_extractor.py
-│   ├── test_import_analyzer.py
-│   ├── test_dependency_tracker.py
-│   └── test_prompt_generator.py
-└── (possibly other files)
-```
-
-Explanation of each module’s responsibilities:
-
-1. **`test_runner.py`** – runs `unittest discover`, captures results (via `subprocess.run`).
-2. **`test_parser.py`** – parses stdout to identify `FAIL`/`ERROR` lines, extracts file path, test name, traceback, etc.
-3. **`code_extractor.py`** – given a file path + function name, extracts only relevant code from test or source files.
-4. **`import_analyzer.py`** – given Python code, determines which imports are actually used.
-5. **`dependency_tracker.py`** – given an entry function, recursively identifies which additional functions/classes are called across the codebase.
-6. **`prompt_generator.py`** – orchestrates and writes the final `prompt.txt`, with optional instructions from `prompt_instructions.txt`.
-7. **`main.py`** – ties them all together in a user-facing script.
-
 ### 3.2 Error Handling
 - Missing files must be handled gracefully (log a warning, skip that test or snippet).
 - Malformed Python in a file should not crash the entire tool. Log the error and move on.

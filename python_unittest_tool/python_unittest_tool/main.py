@@ -105,6 +105,9 @@ def run_analysis(config: Config) -> int:
         dependency_tracker = DependencyTracker(config.project_root)
         prompt_generator = PromptGenerator(config.project_root)
         
+        # NEW: Create an ImportAnalyzer instance
+        import_analyzer = ImportAnalyzer()
+
         # Run tests and get output
         logger.info("Running tests...")
         test_result = test_runner.run_tests()
@@ -132,6 +135,10 @@ def run_analysis(config: Config) -> int:
                 failure.test_name
             )
             
+            # NEW: Filter out unused imports in the failing test code
+            used_imports_test = import_analyzer.analyze_code(test_code.test_code or "")
+            test_code.imports = used_imports_test
+
             # Track dependencies
             source_segments = []
             tracked_functions = dependency_tracker.track_dependencies(
@@ -140,13 +147,16 @@ def run_analysis(config: Config) -> int:
                 failure.test_class
             )
             
-            # Extract source code for each dependency
+            # Extract and filter source code for each dependency
             for func in tracked_functions:
                 source_code = code_extractor.extract_source_code(
                     func.file_path,
                     func.name,
                 )
                 if source_code:
+                    # NEW: Filter out unused imports in the source function code
+                    used_imports_src = import_analyzer.analyze_code(source_code.source_code or "")
+                    source_code.imports = used_imports_src
                     source_segments.append(source_code)
             
             # Create failure info

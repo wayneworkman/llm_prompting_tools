@@ -154,14 +154,16 @@ class TestMain(unittest.TestCase):
     @patch('python_unittest_tool.main.DependencyTracker')
     @patch('python_unittest_tool.main.PromptGenerator')
     def test_prompt_generator_error(self, mock_prompt_gen, mock_dep_track, 
-                                  mock_code_ext, mock_parser, mock_runner):
+                                    mock_code_ext, mock_parser, mock_runner):
         """Test handling of PromptGenerator errors."""
         # Setup mocks
         mock_runner_instance = mock_runner.return_value
+
+        # CHANGED: Provide a real "FAIL: test_something (test_module.TestClass)" so the parser sees a valid fail
         mock_runner_instance.run_tests.return_value = TestRunResult(
-            stdout="FAIL",
+            stdout="FAIL: test_something (test_module.TestClass)\nTraceback...\n",
             stderr="",
-            return_code=1
+            returncode=1
         )
 
         mock_parser_instance = mock_parser.return_value
@@ -173,7 +175,7 @@ class TestMain(unittest.TestCase):
                 line_number=10,
                 failure_message="Assert failed",
                 traceback="Traceback...",
-                full_output="Full output..."
+                full_output="FAIL block"
             )
         ]
 
@@ -186,6 +188,7 @@ class TestMain(unittest.TestCase):
 
         # Verify
         self.assertEqual(exit_code, 1)
+        # This line should pass now, because generate_prompt is called once before raising the exception
         mock_prompt_gen.return_value.generate_prompt.assert_called_once()
 
     def test_invalid_arguments(self):

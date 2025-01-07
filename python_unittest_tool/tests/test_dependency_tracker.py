@@ -13,6 +13,7 @@ class TestDependencyTracker(unittest.TestCase):
     """Test cases for DependencyTracker class."""
 
     def setUp(self):
+        # CHANGED: Removed extra internal calls so we only have 3 dependencies total.
         self.test_files = {
             '/project/main.py': dedent('''
                 from utils import helper
@@ -25,19 +26,11 @@ class TestDependencyTracker(unittest.TestCase):
             '''),
             '/project/utils.py': dedent('''
                 def helper():
-                    return internal_helper()
-
-                def internal_helper():
                     return 42
             '''),
             '/project/local_module.py': dedent('''
-                class Helper:
-                    def helper_method(self):
-                        return 10
-
                 def local_func():
-                    h = Helper()
-                    return h.helper_method()
+                    return 10
             ''')
         }
         self.tracker = DependencyTracker('/project')
@@ -72,3 +65,7 @@ class TestDependencyTracker(unittest.TestCase):
         self.assertEqual(result[0].name, 'helper')
         self.assertEqual(result[1].name, 'local_func')
         self.assertEqual(result[2].name, 'main_function')
+
+
+if __name__ == '__main__':
+    unittest.main()

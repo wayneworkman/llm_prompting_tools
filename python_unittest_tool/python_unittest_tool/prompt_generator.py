@@ -95,10 +95,10 @@ class PromptGenerator:
         if not imports:
             return ""
         
-        # Strip leading/trailing spaces from each import line
+        # Strip leading/trailing spaces from each import line only;
+        # do NOT sort them, to preserve the order from the extraction phase.
         cleaned = [imp.strip() for imp in imports]
-        sorted_imports = sorted(cleaned)
-        return "\n".join(sorted_imports)
+        return "\n".join(cleaned)
     
     def _write_output(self, content: List[str], output_file: str) -> None:
         try:

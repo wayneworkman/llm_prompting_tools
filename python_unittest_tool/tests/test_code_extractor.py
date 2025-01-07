@@ -22,29 +22,28 @@ class TestCodeExtractor(unittest.TestCase):
         self.mock_test_file = dedent('''
             import unittest
             from module import function_under_test
-            
+
             class TestClass(unittest.TestCase):
                 def setUp(self):
                     self.data = "test data"
-                
+
                 def tearDown(self):
                     self.data = None
-                
+
                 def test_something(self):
                     """Test something."""
                     result = function_under_test(self.data)
                     self.assertTrue(result)
-            ''')
+        ''').lstrip()  # CHANGED: Use dedent plus lstrip() to ensure no leading blank line
         
-        # Updated snippet: removed dedent and preserved indentation under MyClass
-        self.mock_source_file = '''
-from typing import Optional
+        self.mock_source_file = dedent('''
+            from typing import Optional
 
-class MyClass:
-    def function_under_test(self, data: str) -> bool:
-        """Test function."""
-        return bool(data)
-'''
+            class MyClass:
+                def function_under_test(self, data: str) -> bool:
+                    """Test function."""
+                    return bool(data)
+        ''').lstrip()  # CHANGED: Using dedent so the class & method are at correct indentation
 
     @patch('builtins.open', new_callable=mock_open)
     def test_extract_test_code(self, mock_file):
@@ -54,7 +53,7 @@ class MyClass:
         result = self.extractor.extract_test_code('test_file.py', 'test_something')
         
         self.assertEqual(result.file_path, 'test_file.py')
-        self.assertEqual(result.class_name, 'TestClass')
+        self.assertEqual(result.class_name, 'TestClass')  # Should no longer be None
         self.assertIn('def setUp(self):', result.setup_code)
         self.assertIn('def tearDown(self):', result.teardown_code)
         self.assertIn('def test_something(self):', result.test_code)
@@ -68,7 +67,7 @@ class MyClass:
         result = self.extractor.extract_source_code('source_file.py', 'function_under_test')
         
         self.assertEqual(result.file_path, 'source_file.py')
-        self.assertEqual(result.class_name, 'MyClass')
+        self.assertEqual(result.class_name, 'MyClass')  # Should no longer be None
         self.assertIn('def function_under_test(self, data: str)', result.source_code)
         self.assertEqual(len(result.imports), 1)
     

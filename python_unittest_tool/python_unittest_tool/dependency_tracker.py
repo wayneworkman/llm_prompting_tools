@@ -76,15 +76,20 @@ class DependencyTracker:
         visited: Set[Tuple[str, str, Optional[str]]],
         result: List[FunctionNode]
     ) -> None:
+        """
+        Analyzes the specified (file_path, function_name, class_name) to find its dependencies,
+        recurses on each one, then appends the corresponding FunctionNode at the end. This
+        ensures 'helper' and 'local_func' appear before 'main_function' in the 'result'.
+        """
         key = (file_path, function_name, class_name)
         if key in visited:
             return
         visited.add(key)
-        
-        # Build import map if needed
+
+        # Build or update the import map for this file
         self._build_import_map(file_path)
-        
-        # Ensure file content is in file_cache
+
+        # Read the file from cache (or skip if missing)
         if file_path not in self.file_cache:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -92,33 +97,23 @@ class DependencyTracker:
             except Exception as e:
                 logger.error(f"Failed to read file {file_path}: {e}")
                 return
-        
+
         source = self.file_cache[file_path]
         try:
             tree = ast.parse(source)
         except Exception as e:
             logger.error(f"Failed to parse file {file_path}: {e}")
             return
-        
-        # Analyze function calls
+
+        # Use a FunctionAnalyzer to locate the function and gather dependencies
         visitor = FunctionAnalyzer(function_name, class_name, source)
         visitor.visit(tree)
-        
+
         if not visitor.found_function:
             logger.warning(f"Function {function_name} not found in {file_path}")
             return
-        
-        node = FunctionNode(
-            name=function_name,
-            file_path=file_path,
-            class_name=class_name,
-            source_code=visitor.source_code,
-            start_line=visitor.start_line,
-            end_line=visitor.end_line,
-            dependencies=visitor.dependencies
-        )
-        
-        # Recurse
+
+        # For each dependency, figure out where it comes from, then recurse
         for dep_name, dep_class in visitor.dependencies:
             resolved_file, resolved_func_name, resolved_class = self._resolve_dependency(
                 current_file=file_path,
@@ -133,7 +128,17 @@ class DependencyTracker:
                     visited,
                     result
                 )
-        
+
+        # Finally, create our FunctionNode and append it
+        node = FunctionNode(
+            name=function_name,
+            file_path=file_path,
+            class_name=class_name,
+            source_code=visitor.source_code,
+            start_line=visitor.start_line,
+            end_line=visitor.end_line,
+            dependencies=visitor.dependencies
+        )
         result.append(node)
     
     def _build_import_map(self, file_path: str) -> None:

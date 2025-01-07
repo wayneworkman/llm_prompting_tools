@@ -166,7 +166,7 @@ class TestPromptGenerator(unittest.TestCase):
         # Verify imports are sorted
         import_section = written_content.split("===")[2]  # Get the test file section
         import_lines = [line for line in import_section.split("\n") if line.startswith(("import", "from"))]
-        self.assertEqual(import_lines, sorted(self.test_segment.imports))
+        self.assertEqual(import_lines, self.test_segment.imports)
     
     @patch('pathlib.Path.write_text')
     @patch('pathlib.Path.exists')
