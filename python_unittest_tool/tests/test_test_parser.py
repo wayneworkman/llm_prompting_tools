@@ -84,5 +84,63 @@ AssertionError: True is not false
         self.assertEqual(failures[0].test_name, "test_directory_pattern_with_subdirs")
 
 
+    
+    def test_failed_test_module_import_error(self):
+        """
+        Simulate an import error that yields a unittest.loader._FailedTest.
+        Confirm that the parser sees it as an ERROR.
+        """
+        mock_output = """
+======================================================================
+ERROR: test_dependency_tracker (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_dependency_tracker
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "/usr/lib/python3.10/unittest/loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "/path/to/python_unittest_tool/tests/test_dependency_tracker.py", line 9, in <module>
+    from python_unittest_tool.dependency_tracker import DependencyTracker
+ModuleNotFoundError: No module named 'python_unittest_tool.dependency_tracker'
+======================================================================
+"""
+        failures = self.parser.parse_output(mock_output)
+        self.assertEqual(len(failures), 1, "Should detect one failed test import.")
+        failure = failures[0]
+        self.assertEqual(failure.test_name, "test_dependency_tracker")
+        self.assertEqual(failure.test_class, "_FailedTest")
+        self.assertIn("ModuleNotFoundError", failure.failure_message)
+
+        # Confirm we got the file path from the line, ignoring trailing text
+        self.assertIn("test_dependency_tracker.py", failure.file_path)
+        self.assertEqual(failure.line_number, 9)
+
+    def test_failed_test_with_in_module_line(self):
+        """
+        Test a scenario where the line includes `, in <module>` after the line number.
+        Ensures the new FILE_LINE_PATTERN captures it.
+        """
+        mock_output = """
+======================================================================
+ERROR: test_stuff (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/some/path/file.py", line 10, in <module>
+    from somepackage import something
+ModuleNotFoundError: No module named 'somepackage'
+======================================================================
+"""
+        failures = self.parser.parse_output(mock_output)
+        self.assertEqual(len(failures), 1, "Should detect one error.")
+        failure = failures[0]
+        self.assertEqual(failure.test_name, "test_stuff")
+        self.assertEqual(failure.test_class, "_FailedTest")
+        self.assertIn("ModuleNotFoundError", failure.failure_message)
+        self.assertIn("file.py", failure.file_path)
+        self.assertEqual(failure.line_number, 10)
+
+
+
 if __name__ == '__main__':
     unittest.main()

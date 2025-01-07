@@ -19,6 +19,7 @@ from python_unittest_tool.import_analyzer import ImportAnalyzer
 from python_unittest_tool.dependency_tracker import DependencyTracker
 from python_unittest_tool.prompt_generator import PromptGenerator, FailureInfo
 
+# -- FIX: Remove 'ModuleNotFoundError' from importlib.metadata import line
 from importlib.metadata import version as metadata_version, PackageNotFoundError
 
 logging.basicConfig(
@@ -47,6 +48,7 @@ def parse_args() -> Config:
     try:
         package_version = metadata_version("python_unittest_tool")
     except PackageNotFoundError:
+        # If version can't be found, fallback to "unknown"
         package_version = "unknown"
 
     parser = argparse.ArgumentParser(
@@ -101,7 +103,6 @@ def parse_args() -> Config:
     )
 
 
-
 def run_analysis(config: Config) -> int:
     """
     Final approach:
@@ -118,7 +119,7 @@ def run_analysis(config: Config) -> int:
         import_analyzer = ImportAnalyzer()
 
         logger.info("Running tests...")
-        test_result = test_runner.run_tests()  
+        test_result = test_runner.run_tests()
         # If the test runner raises an Exception, we jump to except => return 1
 
         if not test_result.has_failures:
@@ -180,11 +181,6 @@ def run_analysis(config: Config) -> int:
         return 1
 
 
-
-
-# -------------
-# main function
-# -------------
 def main() -> int:
     """
     Main entry point.
@@ -198,7 +194,7 @@ def main() -> int:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return 1
 
-# Helper subfunction for main()
+
 def _execute_main() -> int:
     config = parse_args()
     return run_analysis(config)

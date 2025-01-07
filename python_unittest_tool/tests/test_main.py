@@ -295,7 +295,7 @@ class TestMain(unittest.TestCase):
                 expected_output = "python_unittest_tool 0.1.0"
                 self.assertEqual(output, expected_output, "Should print the correct version string")
 
-    @patch('importlib.metadata.version')
+    @patch('python_unittest_tool.main.metadata_version')
     def test_version_not_found(self, mock_version):
         """Test graceful handling when version cannot be determined."""
         from importlib.metadata import PackageNotFoundError
