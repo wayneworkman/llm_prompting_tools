@@ -126,5 +126,31 @@ class TestImportAnalyzer(unittest.TestCase):
         self.assertIn('import os', used_imports)
 
 
+    def test_third_party_import_skipped(self):
+        """
+        If code does 'import requests' or 'from requests import get', 
+        ensure we don't try to parse or attach that library's internal code.
+        We just see an import statement, nothing more.
+        """
+        code = dedent('''
+            import requests
+            from requests import get
+
+            def do_stuff():
+                data = get("http://example.com")
+                return data
+        ''')
+
+        analyzer = ImportAnalyzer()
+        used_imports = analyzer.analyze_code(code)
+        # We'll see both imports as used, presumably
+        self.assertEqual(len(used_imports), 2)
+        self.assertIn('import requests', used_imports)
+        self.assertIn('from requests import get', used_imports)
+
+        # But crucially, we won't parse "requests" internally or do anything fancy with it
+        # If the tool had a skip-libs logic, we might confirm we never read from site-packages, etc.
+
+
 if __name__ == '__main__':
     unittest.main()

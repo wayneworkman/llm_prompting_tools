@@ -89,13 +89,10 @@ def parse_args() -> Config:
 
 def run_analysis(config: Config) -> int:
     """
-    Run the complete test analysis workflow.
-    
-    Args:
-        config: Configuration object
-        
-    Returns:
-        Exit code (0 for success, non-zero for failure)
+    Run the complete test analysis workflow with logic:
+    - Return 1 if the test runner fails to run (Exception) or prompt generation fails
+    - Return 0 otherwise (including if we have test failures)
+    - If test_result has_failures => parse them, else skip parse_output
     """
     try:
         test_runner = TestRunner(config.test_dir)
@@ -107,45 +104,49 @@ def run_analysis(config: Config) -> int:
         import_analyzer = ImportAnalyzer()
 
         logger.info("Running tests...")
+        # If test_runner.run_tests() itself raises an exception, we catch below
         test_result = test_runner.run_tests()
-        
+
         if not test_result.has_failures:
-            logger.info("All tests passed!")
+            logger.info("All tests passed (no failures).")
+            # do NOT parse output => fix "test_successful_run_no_failures"
+            # skip prompt generation as well
             return 0
         
+        # If we do have failures => parse them
         logger.info("Parsing test failures...")
         failures = test_parser.parse_output(test_result.stdout)
-        
         if not failures:
+            # No test failures discovered in the output
             logger.warning("No test failures found in output.")
             return 0
+        
+        logger.info(f"Discovered {len(failures)} failing/errored test(s).")
         
         failure_infos: List[FailureInfo] = []
         for failure in failures:
             logger.info(f"Processing failure: {failure.test_name}")
-            
             test_code = code_extractor.extract_test_code(
                 failure.file_path,
                 failure.test_name
             )
-            
             used_imports_test = import_analyzer.analyze_code(test_code.test_code or "")
             test_code.imports = used_imports_test
 
-            source_segments = []
             tracked_functions = dependency_tracker.track_dependencies(
                 failure.file_path,
                 failure.test_name,
                 failure.test_class
             )
-            
+            source_segments = []
             for func in tracked_functions:
                 source_code = code_extractor.extract_source_code(
-                    func.file_path,
-                    func.name,
+                    func.file_path, func.name
                 )
                 if source_code:
-                    used_imports_src = import_analyzer.analyze_code(source_code.source_code or "")
+                    used_imports_src = import_analyzer.analyze_code(
+                        source_code.source_code or ""
+                    )
                     source_code.imports = used_imports_src
                     source_segments.append(source_code)
 
@@ -156,16 +157,22 @@ def run_analysis(config: Config) -> int:
                     source_segments=source_segments
                 )
             )
-        
+
         logger.info(f"Generating prompt file: {config.output_file}")
-        prompt_generator.generate_prompt(failure_infos, config.output_file)
-        
-        logger.info("Analysis complete!")
+        try:
+            prompt_generator.generate_prompt(failure_infos, config.output_file)
+        except Exception as gen_exc:
+            logger.error(f"Prompt generation failed: {gen_exc}", exc_info=True)
+            return 1  # fail if prompt generation fails
+
+        logger.info("Analysis complete, returning 0.")
         return 0
-        
+
     except Exception as e:
-        logger.error(f"Analysis failed: {str(e)}", exc_info=True)
+        logger.error(f"Analysis failed (test runner error or other): {e}", exc_info=True)
         return 1
+
+
 
 # -------------
 # main function

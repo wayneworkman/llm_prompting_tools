@@ -220,5 +220,46 @@ class TestMain(unittest.TestCase):
                 main.parse_args()
 
 
+    def test_number_of_issues_zero_means_unlimited(self):
+        """
+        Ensure that specifying --number-of-issues=0 includes all discovered test failures.
+        """
+        with patch('sys.argv', ['script.py', 
+                                '--project-root', '.', 
+                                '--test-dir', 'tests',
+                                '--number-of-issues', '0',
+                                '--output-file', 'prompt.txt']):
+            with patch('python_unittest_tool.main.TestRunner') as mock_runner, \
+                patch('python_unittest_tool.main.TestOutputParser') as mock_parser, \
+                patch('python_unittest_tool.main.CodeExtractor'), \
+                patch('python_unittest_tool.main.DependencyTracker'), \
+                patch('python_unittest_tool.main.PromptGenerator') as mock_gen:
+
+                mock_runner_instance = mock_runner.return_value
+                # Fake a return_code=1 => failures
+                mock_runner_instance.run_tests.return_value = TestRunResult(
+                    stdout="FAIL", stderr="", return_code=1
+                )
+
+                # Suppose 3 failures discovered
+                mock_parser_instance = mock_parser.return_value
+                mock_parser_instance.parse_output.return_value = [
+                    TestFailure(test_name=f"test_{i}", test_class="TestClass",
+                                file_path=f"/test/path_{i}", line_number=10,
+                                failure_message="Boom", traceback="Traceback...",
+                                full_output=f"Full failure {i}")
+                    for i in range(3)
+                ]
+
+                exit_code = main.main()
+                self.assertEqual(exit_code, 0)
+                # ensure we generated the prompt with all 3
+                mock_gen.return_value.generate_prompt.assert_called_once()
+                failures_passed = mock_gen.return_value.generate_prompt.call_args[0][0]
+                self.assertEqual(len(failures_passed), 3,
+                                "We want all 3 failures included because number_of_issues=0 is unlimited.")
+
+
 if __name__ == '__main__':
     unittest.main()
+
