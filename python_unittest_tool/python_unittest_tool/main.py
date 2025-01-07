@@ -19,6 +19,8 @@ from python_unittest_tool.import_analyzer import ImportAnalyzer
 from python_unittest_tool.dependency_tracker import DependencyTracker
 from python_unittest_tool.prompt_generator import PromptGenerator, FailureInfo
 
+from importlib.metadata import version as metadata_version, PackageNotFoundError
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -42,10 +44,22 @@ def parse_args() -> Config:
     Returns:
         Config object containing parsed arguments
     """
+    try:
+        package_version = metadata_version("python_unittest_tool")
+    except PackageNotFoundError:
+        package_version = "unknown"
+
     parser = argparse.ArgumentParser(
         description='Analyze failing unit tests and generate LLM prompt.'
     )
-    
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"python_unittest_tool {package_version}",
+        help="Show program's version number and exit."
+    )
+
     parser.add_argument(
         '--project-root',
         type=str,
@@ -85,6 +99,7 @@ def parse_args() -> Config:
         number_of_issues=args.number_of_issues,
         output_file=args.output_file
     )
+
 
 
 def run_analysis(config: Config) -> int:

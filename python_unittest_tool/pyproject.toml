@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python_unittest_tool"
+version = "0.1.0"
+description = "A CLI tool for analyzing Python unittest failures, extracting relevant code, and building an LLM prompt."
+readme = "README.md"
+requires-python = ">=3.6"
+license = { text = "MIT" }
+
+authors = [
+  { name = "Wayne Workman", email = "wayne@theworkmans.us" }
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.6",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11"
+]
+
+keywords = ["cli", "unittest", "llm", "prompt"]
+
+dependencies = []
+
+[project.urls]
+"Homepage" = "https://github.com/wayneworkman/llm_prompting_tools/tree/main/python_unittest_tool"
+"Bug Tracker" = "https://github.com/wayneworkman/llm_prompting_tools/issues"
+
+[project.scripts]
+python_unittest_tool = "python_unittest_tool.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["python_unittest_tool"]
+exclude = [
+  "tests",
+  "*.tests",
+  "tests.*",
+  "dist",
+  "build"
+]

@@ -8,9 +8,10 @@ from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 import argparse
 import sys
+import os
+import tempfile
 from textwrap import dedent
 
-# Changed these lines to point to python_unittest_tool package:
 from python_unittest_tool import main
 from python_unittest_tool.test_runner import TestRunResult
 from python_unittest_tool.test_parser import TestFailure
@@ -148,7 +149,6 @@ class TestMain(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         mock_runner_instance.run_tests.assert_called_once()
 
-
     @patch('python_unittest_tool.main.TestRunner')
     @patch('python_unittest_tool.main.TestOutputParser')
     @patch('python_unittest_tool.main.CodeExtractor')
@@ -204,9 +204,6 @@ class TestMain(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         mock_prompt_gen.return_value.generate_prompt.assert_called_once()
 
-
-
-
     def test_invalid_arguments(self):
         """Test handling of invalid command line arguments."""
         with patch('sys.argv', ['script.py', '--invalid-arg']):
@@ -218,7 +215,6 @@ class TestMain(unittest.TestCase):
         with patch('sys.argv', ['script.py', '--number-of-issues', '-1']):
             with self.assertRaises(SystemExit):
                 main.parse_args()
-
 
     def test_number_of_issues_zero_means_unlimited(self):
         """
@@ -235,8 +231,6 @@ class TestMain(unittest.TestCase):
                  patch('python_unittest_tool.main.DependencyTracker'), \
                  patch('python_unittest_tool.main.PromptGenerator') as mock_gen:
 
-                # --- NEW LINES START ---
-                # Provide valid return values for extract_test_code and extract_source_code
                 from python_unittest_tool.code_extractor import CodeSegment
                 mock_code_extractor_instance = mock_code_extractor.return_value
                 mock_code_extractor_instance.extract_test_code.return_value = CodeSegment(
@@ -257,7 +251,6 @@ class TestMain(unittest.TestCase):
                     source_code='def some_helper(): pass',
                     imports=[]
                 )
-                # --- NEW LINES END ---
 
                 mock_runner_instance = mock_runner.return_value
                 # Fake a return_code=1 => failures
@@ -283,8 +276,41 @@ class TestMain(unittest.TestCase):
                 self.assertEqual(len(failures_passed), 3,
                                 "We want all 3 failures included because number_of_issues=0 is unlimited.")
 
+    # ---------------------------------------------------------------------
+    # NEW TESTS FOR VERSION ARGUMENT
+    # ---------------------------------------------------------------------
+    @patch('importlib.metadata.version')
+    def test_version_argument(self, mock_version):
+        """Test that --version shows the correct version and exits."""
+        mock_version.return_value = "0.1.0"
+        with patch('sys.argv', ['script.py', '--version']):
+            with patch('sys.stdout', new=tempfile.SpooledTemporaryFile(mode='w+')) as stdout:
+                # We expect a SystemExit once the parser prints version and exits
+                with self.assertRaises(SystemExit) as cm:
+                    main.main()
+                self.assertEqual(cm.exception.code, 0, "Version argument should exit with code 0")
+
+                stdout.seek(0)
+                output = stdout.read().strip()
+                expected_output = "python_unittest_tool 0.1.0"
+                self.assertEqual(output, expected_output, "Should print the correct version string")
+
+    @patch('importlib.metadata.version')
+    def test_version_not_found(self, mock_version):
+        """Test graceful handling when version cannot be determined."""
+        from importlib.metadata import PackageNotFoundError
+        mock_version.side_effect = PackageNotFoundError("Could not find version")
+        with patch('sys.argv', ['script.py', '--version']):
+            with patch('sys.stdout', new=tempfile.SpooledTemporaryFile(mode='w+')) as stdout:
+                with self.assertRaises(SystemExit) as cm:
+                    main.main()
+                self.assertEqual(cm.exception.code, 0, "Should still exit successfully even if version is unknown")
+
+                stdout.seek(0)
+                output = stdout.read().strip()
+                expected_output = "python_unittest_tool unknown"
+                self.assertEqual(output, expected_output, "Should show 'unknown' when version not found")
 
 
 if __name__ == '__main__':
     unittest.main()
-
