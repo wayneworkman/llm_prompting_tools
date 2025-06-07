@@ -10,7 +10,7 @@ from lib.prompt_generation import generate_prompt
 def main():
     parser = argparse.ArgumentParser(
         description="Generate a prompt file from a directory's contents, "
-                    "only excluding items matched by .gitignore and excluding the .git directory."
+                    "only excluding items matched by .gitignore/.ignore and excluding the .git directory."
     )
     parser.add_argument(
         "--input-dir",
