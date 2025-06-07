@@ -18,14 +18,16 @@
     - If it's **not** found, no error is raised, and no special instructions are included.  
   - If you **do** specify a file with `--prompt-instructions` (i.e. a **non-default** path) but that file does **not** exist, the tool **raises an error** and exits.  
 
-- **Intelligent .gitignore Discovery:**
-  - The tool intelligently locates the appropriate .gitignore file by:
-    - First checking the current working directory
-    - If no .gitignore is found, checks for a .git directory (which indicates repository root)
+- **Intelligent .gitignore and .ignore Discovery:**
+  - The tool intelligently locates and respects both `.gitignore` and `.ignore` files by:
+    - First checking the current working directory for both files
+    - If neither is found, checks for a .git directory (which indicates repository root)
     - If no .git directory is found, looks in parent directories recursively
-    - Stops searching if either a .gitignore file or .git directory is found
+    - Stops searching if either ignore files or .git directory is found
     - Handles permission errors gracefully by stopping the search
-  - This enables you to run the tool from any subdirectory within a repository while still honoring the repository's root .gitignore file
+  - When both `.gitignore` and `.ignore` files are present, their patterns are **combined**
+  - This enables you to run the tool from any subdirectory within a repository while still honoring the repository's ignore files
+  - The `.ignore` file follows the same pattern syntax as `.gitignore`
 
 - **Code Fence Handling for All Files:**  
   - If **any** file (Markdown or otherwise) contains triple backticks (```), it is enclosed between **START/END** markers to prevent confusion when pasting into LLM prompts.  
@@ -81,6 +83,29 @@ dialog_opening --prompt-instructions custom_instructions.txt
 ```
 
 If `custom_instructions.txt` does not exist, the script will exit with an error.
+
+## Using .ignore Files
+
+The `.ignore` file works exactly like `.gitignore` but provides an additional layer of file exclusion control:
+
+- Create a `.ignore` file in your project root (or any directory) using the same syntax as `.gitignore`
+- Patterns from both `.gitignore` and `.ignore` are combined when both files exist
+- Useful for excluding files that you don't want in your prompts but should still be in version control
+
+Example `.ignore` file:
+```
+# Exclude local development files
+*.local
+.env.development
+
+# Exclude large data files for prompts
+data/*.csv
+*.sqlite
+
+# Exclude personal notes
+personal_notes/
+TODO.personal
+```
 
 ## Why Use This?
 
