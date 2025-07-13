@@ -1,5 +1,3 @@
-# lib/prompt_generation.py (place in ./lib/prompt_generation.py)
-
 import os
 from lib.listing import recursive_list
 from lib.gitignore_utils import load_gitignore_spec, should_include_file
@@ -23,18 +21,47 @@ def generate_prompt(input_dir, output_file, prompt_instructions=None):
     # Build the directory listing lines, respecting the .gitignore
     listing_lines = recursive_list(input_dir, input_dir, gitignore_spec)
 
-    # Collect included files
+    # Collect included files with proper directory tracking
     included_files = []
+    current_dir = input_dir  # Track current directory context
+    
     for line in listing_lines:
         line = line.strip()
-        if not line or line.endswith(':') or line.startswith("total "):
+        if not line:
             continue
+            
+        # Check if this line indicates a new directory
+        if line.endswith(':'):
+            # Extract directory path from the line
+            dir_path = line[:-1]  # Remove the trailing colon
+            if os.path.isabs(dir_path):
+                current_dir = dir_path
+            else:
+                # It's a relative path from input_dir
+                current_dir = os.path.join(input_dir, dir_path)
+            continue
+            
+        # Skip total lines
+        if line.startswith("total "):
+            continue
+            
+        # Parse file lines
         parts = line.split()
         if len(parts) < 9:
             continue
+        
+        # Check if this is a directory (starts with 'd') or a file (starts with '-')
+        permissions = parts[0]
+        if not permissions.startswith('-'):
+            # Skip directories, symlinks, etc. - only process regular files
+            continue
+            
         filename = parts[-1]
-        full_path = find_file_path(input_dir, filename)
-        if full_path and should_include_file(full_path, input_dir, gitignore_spec):
+        # Construct full path using current directory context
+        full_path = os.path.join(current_dir, filename)
+        
+        # Verify the file exists and should be included
+        if os.path.exists(full_path) and should_include_file(full_path, input_dir, gitignore_spec):
             # Exclude the output file itself
             if os.path.abspath(full_path) == os.path.abspath(output_file):
                 continue
@@ -102,12 +129,6 @@ def generate_prompt(input_dir, output_file, prompt_instructions=None):
                     out.write(content)
                     out.write("\n```\n\n")
 
-
-def find_file_path(root, filename):
-    for dirpath, dirnames, filenames in os.walk(root):
-        if filename in filenames:
-            return os.path.join(dirpath, filename)
-    return None
 
 def is_markdown_file(fname):
     return fname.lower().endswith(".md")

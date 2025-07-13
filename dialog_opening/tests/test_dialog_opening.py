@@ -9,10 +9,10 @@ import dialog_opening
 
 
 class TestDialogOpeningScript(unittest.TestCase):
-    @patch('importlib.metadata')
-    def test_version_argument(self, mock_importlib):
+    @patch('dialog_opening.version')
+    def test_version_argument(self, mock_version):
         """Test that --version shows the correct version and exits."""
-        mock_importlib.version.return_value = "0.2.0"
+        mock_version.return_value = "0.4.0"  # Match the actual version in pyproject.toml
         test_script = os.path.join(os.path.dirname(__file__), '..', 'dialog_opening.py')
         
         with patch.object(sys, 'argv', [test_script, '--version']):
@@ -24,7 +24,7 @@ class TestDialogOpeningScript(unittest.TestCase):
                 
                 stdout.seek(0)
                 output = stdout.read().strip()
-                expected_output = "dialog_opening 0.2.0"
+                expected_output = "dialog_opening 0.4.0"
                 self.assertEqual(output, expected_output)  # Version should be in output
 
     
