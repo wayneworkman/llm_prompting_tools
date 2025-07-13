@@ -57,6 +57,112 @@ class TestPromptGeneration(unittest.TestCase):
             # Check that our custom instructions are included
             self.assertIn("Custom instructions at the top.", content)
 
+    @patch('lib.prompt_generation.recursive_list')
+    def test_generate_prompt_with_directories(self, mock_recursive_list):
+        """
+        Test that directories in the listing are properly skipped.
+        """
+        mock_recursive_list.return_value = [
+            f"{os.path.abspath(self.root)}:",
+            "total 16",
+            "drwxrwxr-x 2 user group 4096 Jan 01 00:00 subdir",
+            "-rw-rw-r-- 1 user group 123 Jan 01 00:00 README.md",
+            "drwxrwxr-x 3 user group 4096 Jan 01 00:00 another_dir",
+            "-rw-rw-r-- 1 user group 456 Jan 01 00:00 code.py",
+            ""
+        ]
+        output_file = os.path.join(self.root, "prompt.txt")
+        generate_prompt(self.root, output_file, prompt_instructions=None)
+
+        self.assertTrue(os.path.isfile(output_file))
+        with open(output_file, 'r') as f:
+            content = f.read()
+            # Files should be included
+            self.assertIn("README.md", content)
+            self.assertIn("code.py", content)
+            # Directories should not be in the file contents section
+            self.assertNotIn("subdir\n```", content)
+            self.assertNotIn("another_dir\n```", content)
+
+    @patch('lib.prompt_generation.recursive_list')
+    def test_generate_prompt_duplicate_filenames(self, mock_recursive_list):
+        """
+        Test handling of duplicate filenames in different directories.
+        """
+        # Create subdirectories with duplicate filenames
+        subdir1 = os.path.join(self.root, "module1")
+        subdir2 = os.path.join(self.root, "module2")
+        os.makedirs(subdir1)
+        os.makedirs(subdir2)
+        
+        # Create files with same names but different content
+        with open(os.path.join(subdir1, "the_code.py"), "w") as f:
+            f.write("# Module 1 code")
+        with open(os.path.join(subdir2, "the_code.py"), "w") as f:
+            f.write("# Module 2 code")
+        with open(os.path.join(subdir1, "README.md"), "w") as f:
+            f.write("# Module 1 README")
+        with open(os.path.join(subdir2, "README.md"), "w") as f:
+            f.write("# Module 2 README")
+
+        mock_recursive_list.return_value = [
+            f"{os.path.abspath(self.root)}:",
+            "total 8",
+            "drwxrwxr-x 2 user group 4096 Jan 01 00:00 module1",
+            "drwxrwxr-x 2 user group 4096 Jan 01 00:00 module2",
+            "",
+            "module1:",
+            "total 8",
+            "-rw-rw-r-- 1 user group 15 Jan 01 00:00 the_code.py",
+            "-rw-rw-r-- 1 user group 17 Jan 01 00:00 README.md",
+            "",
+            "module2:",
+            "total 8",
+            "-rw-rw-r-- 1 user group 15 Jan 01 00:00 the_code.py",
+            "-rw-rw-r-- 1 user group 17 Jan 01 00:00 README.md",
+            ""
+        ]
+        
+        output_file = os.path.join(self.root, "prompt.txt")
+        generate_prompt(self.root, output_file, prompt_instructions=None)
+
+        with open(output_file, 'r') as f:
+            content = f.read()
+            # Both modules should be represented
+            self.assertIn("Module 1 code", content)
+            self.assertIn("Module 2 code", content)
+            self.assertIn("Module 1 README", content)
+            self.assertIn("Module 2 README", content)
+            # Check relative paths are correct
+            self.assertIn("module1/the_code.py", content)
+            self.assertIn("module2/the_code.py", content)
+
+    @patch('lib.prompt_generation.recursive_list')
+    def test_generate_prompt_symlinks_and_special_files(self, mock_recursive_list):
+        """
+        Test that symlinks and other special files are skipped.
+        """
+        mock_recursive_list.return_value = [
+            f"{os.path.abspath(self.root)}:",
+            "total 16",
+            "-rw-rw-r-- 1 user group 123 Jan 01 00:00 regular.txt",
+            "lrwxrwxrwx 1 user group 11 Jan 01 00:00 symlink -> regular.txt",
+            "prw-rw-r-- 1 user group 0 Jan 01 00:00 named_pipe",
+            "brw-rw---- 1 user group 8, 0 Jan 01 00:00 block_device",
+            ""
+        ]
+        output_file = os.path.join(self.root, "prompt.txt")
+        generate_prompt(self.root, output_file, prompt_instructions=None)
+
+        with open(output_file, 'r') as f:
+            content = f.read()
+            # Only regular files should be included
+            self.assertIn("regular.txt", content)
+            # Special files should not be in file contents
+            self.assertNotIn("symlink\n```", content)
+            self.assertNotIn("named_pipe\n```", content)
+            self.assertNotIn("block_device\n```", content)
+
     def test_generate_prompt_includes_instructions(self):
         """
         If prompt_instructions are provided, they should appear at the top of the output.
